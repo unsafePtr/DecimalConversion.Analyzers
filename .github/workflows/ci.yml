@@ -1,0 +1,32 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore DecimalConversion.slnx
+
+    - name: Build
+      run: dotnet build DecimalConversion.slnx --configuration Release --no-restore
+
+    - name: Test
+      run: dotnet test --project tests/DecimalConversion.Tests/DecimalConversion.Tests.csproj --configuration Release --no-build --verbosity normal

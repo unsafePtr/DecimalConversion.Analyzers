@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DecimalConversion.Analyzers/DecimalConversion.Analyzers.csproj" />
+    <Project Path="src/DecimalConversion.CodeFixes/DecimalConversion.CodeFixes.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DecimalConversion.Tests/DecimalConversion.Tests.csproj" />
+  </Folder>
+</Solution>

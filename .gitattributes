@@ -1,0 +1,6 @@
+# Every text file is stored and checked out with LF on every platform, matching end_of_line = lf in .editorconfig.
+# Plain text=auto would check out CRLF on Windows under core.autocrlf and contradict it.
+* text=auto eol=lf
+
+# Hunk headers name the enclosing type or member instead of showing a bare line range.
+*.cs text diff=csharp
