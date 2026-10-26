@@ -1,0 +1,117 @@
+diff --git a/src/Desk.Core/Fees/FeeSchedule.cs b/src/Desk.Core/Fees/FeeSchedule.cs
+index 8593cb2..c67d06d 100644
+--- a/src/Desk.Core/Fees/FeeSchedule.cs
++++ b/src/Desk.Core/Fees/FeeSchedule.cs
+@@ -2,9 +2,9 @@ namespace Desk.Fees;
+ 
+ public static class FeeSchedule
+ {
+-    public static readonly decimal TakerRate = (decimal)0.0004;
++    public static readonly decimal TakerRate = 0.0004m;
+ 
+     public static decimal TakerFee(decimal notional) => notional * TakerRate;
+ 
+-    public static decimal RoundToCents(decimal amount) => (decimal)Math.Round((double)amount, 2);
++    public static decimal RoundToCents(decimal amount) => decimal.Round(amount, 2);
+ }
+diff --git a/src/Desk.Core/FloatingPoint.cs b/src/Desk.Core/FloatingPoint.cs
+new file mode 100644
+index 0000000..0c6ec77
+--- /dev/null
++++ b/src/Desk.Core/FloatingPoint.cs
+@@ -0,0 +1,26 @@
++using System.Globalization;
++
++namespace Desk;
++
++/// <summary>
++/// Converts a double or float to decimal with the rounding .NET used before 11: 15 significant digits for a double, 7 for a float.
++/// </summary>
++/// <remarks>
++/// This is the recipe from https://learn.microsoft.com/dotnet/core/compatibility/core-libraries/11/decimal-biginteger-floating-point-conversions.
++/// </remarks>
++public static class FloatingPoint
++{
++    public static decimal ToDecimal(double value)
++    {
++        Span<char> text = stackalloc char[32];
++        value.TryFormat(text, out var length, "G15", CultureInfo.InvariantCulture);
++        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
++    }
++
++    public static decimal ToDecimal(float value)
++    {
++        Span<char> text = stackalloc char[32];
++        value.TryFormat(text, out var length, "G7", CultureInfo.InvariantCulture);
++        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
++    }
++}
+diff --git a/src/Desk.Core/Orders/LotSizer.cs b/src/Desk.Core/Orders/LotSizer.cs
+index 8d87257..18c9728 100644
+--- a/src/Desk.Core/Orders/LotSizer.cs
++++ b/src/Desk.Core/Orders/LotSizer.cs
+@@ -2,5 +2,5 @@ namespace Desk.Orders;
+ 
+ public static class LotSizer
+ {
+-    public static decimal ToLots(double requested, decimal lotStep) => Math.Floor((decimal)requested / lotStep) * lotStep;
++    public static decimal ToLots(double requested, decimal lotStep) => Math.Floor(FloatingPoint.ToDecimal(requested) / lotStep) * lotStep;
+ }
+diff --git a/src/Desk.Core/Orders/OrderText.cs b/src/Desk.Core/Orders/OrderText.cs
+index 910f6a8..3360a86 100644
+--- a/src/Desk.Core/Orders/OrderText.cs
++++ b/src/Desk.Core/Orders/OrderText.cs
+@@ -3,5 +3,5 @@ namespace Desk.Orders;
+ public static class OrderText
+ {
+     public static string Limit(string symbol, bool buy, double qty, double price) =>
+-        FormattableString.Invariant($"{(buy ? "BUY" : "SELL")} {symbol} qty={(decimal)qty} px={(decimal)price}");
++        FormattableString.Invariant($"{(buy ? "BUY" : "SELL")} {symbol} qty={FloatingPoint.ToDecimal(qty)} px={FloatingPoint.ToDecimal(price)}");
+ }
+diff --git a/src/Desk.Core/Pricing/PriceRounding.cs b/src/Desk.Core/Pricing/PriceRounding.cs
+index 43aad91..4892475 100644
+--- a/src/Desk.Core/Pricing/PriceRounding.cs
++++ b/src/Desk.Core/Pricing/PriceRounding.cs
+@@ -2,7 +2,7 @@ namespace Desk.Pricing;
+ 
+ public static class PriceRounding
+ {
+-    public static double Bid(double price, int decimals) => Math.Round(price, decimals, MidpointRounding.ToNegativeInfinity);
++    public static double Bid(double price, int decimals) => (double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, MidpointRounding.ToNegativeInfinity);
+ 
+-    public static double Ask(double price, int decimals) => Math.Round(price, decimals, MidpointRounding.ToPositiveInfinity);
++    public static double Ask(double price, int decimals) => (double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, MidpointRounding.ToPositiveInfinity);
+ }
+diff --git a/src/Desk.Core/Pricing/TickInfo.cs b/src/Desk.Core/Pricing/TickInfo.cs
+index 7eb8086..c24eb39 100644
+--- a/src/Desk.Core/Pricing/TickInfo.cs
++++ b/src/Desk.Core/Pricing/TickInfo.cs
+@@ -2,5 +2,5 @@ namespace Desk.Pricing;
+ 
+ public static class TickInfo
+ {
+-    public static int Decimals(double tickSize) => ((decimal)tickSize).Scale;
++    public static int Decimals(double tickSize) => FloatingPoint.ToDecimal(tickSize).Scale;
+ }
+diff --git a/src/Desk.Core/Reports/PnlReport.cs b/src/Desk.Core/Reports/PnlReport.cs
+index 61fca05..4d9ae12 100644
+--- a/src/Desk.Core/Reports/PnlReport.cs
++++ b/src/Desk.Core/Reports/PnlReport.cs
+@@ -2,5 +2,5 @@ namespace Desk.Reports;
+ 
+ public static class PnlReport
+ {
+-    public static decimal Notional(double price, double qty) => decimal.Round((decimal)(price * qty), 2);
++    public static decimal Notional(double price, double qty) => decimal.Round(FloatingPoint.ToDecimal(price * qty), 2);
+ }
+diff --git a/src/Desk.Core/Risk/BalanceCheck.cs b/src/Desk.Core/Risk/BalanceCheck.cs
+index 0085296..5631149 100644
+--- a/src/Desk.Core/Risk/BalanceCheck.cs
++++ b/src/Desk.Core/Risk/BalanceCheck.cs
+@@ -2,5 +2,5 @@ namespace Desk.Risk;
+ 
+ public static class BalanceCheck
+ {
+-    public static bool CanSell(double available, decimal required) => (decimal)available >= required;
++    public static bool CanSell(double available, decimal required) => FloatingPoint.ToDecimal(available) >= required;
+ }

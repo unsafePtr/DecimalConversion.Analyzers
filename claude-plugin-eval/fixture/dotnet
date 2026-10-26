@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Runs the .NET SDK with everything it writes kept inside this folder.
+# The eval sandbox allows writes only here and hides the home directory, so the CLI home, the NuGet folders and the temp directory point here.
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export DOTNET_CLI_HOME="$root/.dotnet-home"
+export NUGET_PACKAGES="$root/.packages"
+export NUGET_HTTP_CACHE_PATH="$root/.tmp/nuget-http"
+export NUGET_PLUGINS_CACHE_PATH="$root/.tmp/nuget-plugins"
+export TMPDIR="$root/.tmp"
+export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false
+export MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0 UseSharedCompilation=false NuGetAudit=false
+# Each run's folder sits inside a git repository whose metadata the sandbox hides, so Source Link's git queries fail the build.
+export EnableSourceControlManagerQueries=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1
+mkdir -p "$DOTNET_CLI_HOME" "$TMPDIR"
+exec dotnet "$@"

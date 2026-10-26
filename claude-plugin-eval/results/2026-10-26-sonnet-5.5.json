@@ -1,0 +1,2975 @@
+{
+  "schemaVersion": 1,
+  "claudeVersion": "2.1.293",
+  "startedAt": "2026-10-26T16:54:20.979Z",
+  "durationSeconds": 882,
+  "costUsd": 2.7718216,
+  "partial": false,
+  "suite": {
+    "root": "/mnt/c/Projects/DecimalConversion.Analyzers",
+    "ablation": "with-without",
+    "modelOverride": "claude-sonnet-5-5",
+    "tagFilters": [
+      "core"
+    ],
+    "threshold": 1,
+    "concurrency": 3,
+    "plugins": [
+      {
+        "name": "dotnet11-floating-point",
+        "version": "0.1.0",
+        "path": "/mnt/c/Projects/DecimalConversion.Analyzers/claude-plugin"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "migrate",
+      "dir": "claude-plugin-eval/evals/migrate",
+      "source": "mixed",
+      "promptMarkdown": "This solution is moving to .NET 11.\nIts test project already targets net10.0 and net11.0, and global.json uses the .NET 11 SDK.\nMake the code behave correctly on .NET 11, keep the results the tests describe, and change only what needs to change.\nBuild and test with `./test.sh`, which runs both frameworks and writes TestResults/summary.txt.\nUse `./dotnet` instead of `dotnet` for any other SDK command; it keeps the SDK's files inside this folder.\nDo not change the tests.\nWhen you are done, list every conversion or rounding you looked at and what you did with it.",
+      "runsPerCase": 3,
+      "timeoutSeconds": 1800,
+      "maxTurns": 80,
+      "graders": [
+        {
+          "name": "fixed-balance-check",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Risk/BalanceCheck.cs"
+            },
+            "pattern": "\\(decimal\\)available",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "fixed-order-text",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Orders/OrderText.cs"
+            },
+            "pattern": "\\(decimal\\)(qty|price)",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "keep-fill-percent",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/FillStats.cs"
+            },
+            "pattern": "decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-latency-log",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Diagnostics/LatencyLog.cs"
+            },
+            "pattern": "\\{\\(decimal\\)ms:F2\\}",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-mid-price",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Pricing/MidPrice.cs"
+            },
+            "pattern": "Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-minute-buckets",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Time/Buckets.cs"
+            },
+            "pattern": "\\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-ranking",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/Ranking.cs"
+            },
+            "pattern": "OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-volatility",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/Volatility.cs"
+            },
+            "pattern": "decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "no-peek",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "claude-plugin-eval|fixture-patches|golden\\.patch|blanket\\.patch|/graders/",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "ran-tests",
+          "type": "tool_used",
+          "weight": 0.5,
+          "config": {
+            "tool": "Bash",
+            "input_match": "test\\.sh",
+            "min": 1,
+            "arm": "both"
+          }
+        },
+        {
+          "name": "report",
+          "type": "llm",
+          "weight": 1,
+          "graderMarkdown": "Judge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.\nPASS if it lists the double-to-decimal conversions and roundings it changed, with how, and separately names the ones it left unchanged, with a reason for each.\nFAIL if it does not mention any unchanged conversion, or gives no reason for leaving them.",
+          "config": {
+            "criteria": "Judge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.\nPASS if it lists the double-to-decimal conversions and roundings it changed, with how, and separately names the ones it left unchanged, with a reason for each.\nFAIL if it does not mention any unchanged conversion, or gives no reason for leaving them.",
+            "focus": "last_message"
+          }
+        },
+        {
+          "name": "tests-net10",
+          "type": "regex",
+          "weight": 2,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "net10\\.0 total=27 passed=27 failed=0",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "tests-net11",
+          "type": "regex",
+          "weight": 3,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "net11\\.0 total=27 passed=27 failed=0",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "tests-unchanged",
+          "type": "regex",
+          "weight": 2,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "^tests-unchanged$",
+            "flags": "m",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 9,
+            "costUsd": 0.1720368,
+            "judgeCostUsd": 0.00046620000000000006,
+            "durationSeconds": 70,
+            "startedAt": "2026-10-26T16:54:22.450Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-6wQYbn/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "`./test.sh` now passes 27 of 27 on both net10.0 and net11.0, and the summary says `tests-unchanged`. Before the change, net11.0 had 14 failures. net10.0 had one, `TakerFee`, because the SDK 11 compiler folds constant casts the new way on any target framework.\n\nThe `dotnet` wrapper tried to reach nuget.org and builds.dotnet.microsoft.com and was denied. The build and tests ran anyway.\n\nI added one helper, `src/Desk.Core/FloatingPoint.cs`. `FloatingPoint.ToDecimal(double)` formats the value with `G15` and parses it, which gives the .NET 10 result on both runtimes.\n\n**Changed**\n\n| File | Expression | Source → sink | Action |\n|---|---|---|---|\n| `Fees/FeeSchedule.cs` | `(decimal)0.0004` | constant | now the literal `0.0004m` |\n| `Fees/FeeSchedule.cs` | `(decimal)Math.Round((double)amount, 2)` | a decimal sent through a double | now `decimal.Round(amount, 2)`; `decimal.Round` defaults to ToEven, as `Math.Round` did |\n| `Orders/LotSizer.cs` | `(decimal)requested` | decimal intent → floor to a step | `FloatingPoint.ToDecimal(requested)` |\n| `Orders/OrderText.cs` | `(decimal)qty`, `(decimal)price` | decimal intent → default `ToString` in order text | `FloatingPoint.ToDecimal` on both |\n| `Pricing/PriceRounding.cs` | `Math.Round(price, d, ToNegativeInfinity)` and `ToPositiveInfinity` | directed rounding | `(double)decimal.Round(FloatingPoint.ToDecimal(price), d, mode)` |\n| `Pricing/TickInfo.cs` | `((decimal)tickSize).Scale` | reads `Scale` | `FloatingPoint.ToDecimal(tickSize)` |\n| `Reports/PnlReport.cs` | `(decimal)(price * qty)` | decimal intent → nearest round at a possible midpoint (2.675 → 2.68) | `FloatingPoint.ToDecimal(price * qty)` |\n| `Risk/BalanceCheck.cs` | `(decimal)available` | decimal intent → compared with `required` | `FloatingPoint.ToDecimal(available)` |\n\n**Looked at and kept unchanged**\n\n- `Analytics/FillStats.cs`, `(decimal)(filled / requested) * 100m`: a computed ratio with a nearest round to 1 digit.\n- `Analytics/Ranking.cs`, `(decimal)s.Value`: only used for ordering.\n- `Analytics/Volatility.cs`, `(decimal)(stdDev * Math.Sqrt(365))`: a computed statistic with a nearest round to 4 digits.\n- `Diagnostics/LatencyLog.cs`, `(decimal)ms:F2`: fixed-format display.\n- `Time/Buckets.cs`, `(decimal)Math.Floor(seconds / 60)`: an integral value far below 1e15.\n- `Pricing/MidPrice.cs`, `Math.Round(x, 8)`: no `MidpointRounding` mode, so it is not affected.\n- `Pricing/MidPrice.cs`, `Math.Round(x, 2, AwayFromZero)` in `SpreadBps`: AwayFromZero on a computed value, so it is not affected.\n- `Quote.Parse` uses `double.Parse`, which is not a decimal conversion.\n\nThe kept sites could differ from .NET 10 only in a last-digit midpoint case, and nothing downstream depends on that."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 7,
+            "costUsd": 0.13723010000000002,
+            "judgeCostUsd": 0.00045990000000000007,
+            "durationSeconds": 51,
+            "startedAt": "2026-10-26T16:54:22.450Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-St8ktt/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 2x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "The code now behaves correctly on .NET 11. `./test.sh` passes 27 of 27 tests on both net10.0 and net11.0, and the test sources are unchanged. The sandbox denied some network calls to nuget.org and builds.dotnet.microsoft.com during the run. The build and tests still completed.\n\nI added one helper, `src/Desk.Core/FloatingPoint.cs`, containing `FloatingPoint.ToDecimal(double)`. It formats the value to 15 significant digits and parses that as a decimal, so it gives the .NET 10 result on both runtimes.\n\n**Changed**\n\n| File | Expression | Source and sink | Action |\n|---|---|---|---|\n| `Fees/FeeSchedule.cs` | `(decimal)0.0004` | constant | now the literal `0.0004m` |\n| `Fees/FeeSchedule.cs` | `(decimal)Math.Round((double)amount, 2)` | a decimal sent through a double | now `decimal.Round(amount, 2)`, with no double involved |\n| `Orders/LotSizer.cs` | `(decimal)requested` | parsed size, floored to a lot step | `FloatingPoint.ToDecimal` |\n| `Orders/OrderText.cs` | `(decimal)qty`, `(decimal)price` | parsed values, default `ToString` into order text | `FloatingPoint.ToDecimal` |\n| `Pricing/TickInfo.cs` | `((decimal)tickSize).Scale` | tick size, reads `Scale` | `FloatingPoint.ToDecimal` |\n| `Risk/BalanceCheck.cs` | `(decimal)available >= required` | balance, compared against a decimal | `FloatingPoint.ToDecimal` |\n| `Pricing/PriceRounding.cs` | `Math.Round(price, decimals, ToNegativeInfinity)` and `ToPositiveInfinity` | prices, directed rounding | `(double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, mode)` |\n| `Reports/PnlReport.cs` | `(decimal)(price * qty)` | price times quantity, nearest round to cents | `FloatingPoint.ToDecimal`; the 2.675 test case sits exactly on a midpoint and gives 2.67 on .NET 11 without it |\n\n**Kept as they were**\n\n- **`Analytics/FillStats.cs`**, `(decimal)(filled / requested)`: a computed ratio, nearest round to 1 decimal.\n- **`Analytics/Ranking.cs`**, `(decimal)s.Value`: used only for ordering.\n- **`Analytics/Volatility.cs`**, `(decimal)(stdDev * Math.Sqrt(365))`: a computed statistic, nearest round to 4 decimals.\n- **`Diagnostics/LatencyLog.cs`**, `(decimal)ms:F2`: fixed-format display.\n- **`Time/Buckets.cs`**, `(decimal)Math.Floor(seconds / 60)`: an integral value far below 1e15.\n- **`Pricing/MidPrice.cs`**, `Math.Round(x, 8)`: the default mode, which leaves values already on the grid alone.\n- **`Pricing/MidPrice.cs`**, `Math.Round(x, 2, AwayFromZero)` in `SpreadBps`: `AwayFromZero` is not a directed mode, and the value is a computed ratio.\n- **`Quote.Parse`**: `double.Parse` into doubles, with no decimal conversion.\n\n`Volatility.cs` and `FillStats.cs` could land one digit off at an exact midpoint. Nothing downstream depends on that digit, so I accepted it."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 8,
+            "costUsd": 0.14174240000000002,
+            "judgeCostUsd": 0.00040380000000000006,
+            "durationSeconds": 59,
+            "startedAt": "2026-10-26T16:54:22.450Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-al3xDv/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 1x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "The code now behaves correctly on .NET 11, and `./test.sh` passes on both frameworks: 27 of 27 on net10.0 and 27 of 27 on net11.0. The tests are unchanged.\n\n`test.sh` also tried to reach nuget.org and builds.dotnet.microsoft.com, and the sandbox denied both. It still built and ran, so I didn't need either host.\n\nI added one helper, `FloatingPoint.ToDecimal(double)`, in `src/Desk.Core/FloatingPoint.cs`. It converts through 15 significant digits, which gives the same result on .NET 10 and .NET 11.\n\n**Changed**\n\n| Site | Source and sink | Action |\n|---|---|---|\n| `FeeSchedule.TakerRate`: `(decimal)0.0004` | constant | now the literal `0.0004m` |\n| `FeeSchedule.RoundToCents`: `(decimal)Math.Round((double)amount, 2)` | a decimal sent through a double | now `decimal.Round(amount, 2)`, with no double involved |\n| `LotSizer.ToLots`: `(decimal)requested` | decimal-intent size, floored to a step | helper |\n| `OrderText.Limit`: `(decimal)qty` and `(decimal)price` | decimal-intent values written as default text to the wire | helper |\n| `TickInfo.Decimals`: `(decimal)tickSize` | decimal-intent value, and the code reads `Scale` | helper |\n| `PnlReport.Notional`: `(decimal)(price*qty)` | product of decimal-intent inputs, nearest-rounded where it can land on a midpoint (2.675 must give 2.68) | helper |\n| `BalanceCheck.CanSell`: `(decimal)available` | decimal-intent balance compared against a decimal | helper |\n| `PriceRounding.Bid` and `Ask`: `Math.Round(price, d, ToNegativeInfinity/ToPositiveInfinity)` | directed rounding | now `(double)decimal.Round(FloatingPoint.ToDecimal(price), d, mode)` |\n\n**Looked at and kept unchanged**\n\n- `FillStats.FillPercent`: `(decimal)(filled/requested)` is a computed ratio that is then nearest-rounded to 1 digit.\n- `Volatility.Annualized`: `(decimal)(stdDev*√365)` is a computed statistic that is then nearest-rounded to 4 digits.\n- `Ranking`: `(decimal)s.Value` is only used for ordering.\n- `LatencyLog.Line`: `(decimal)ms:F2` is fixed-format display.\n- `Buckets.MinuteStart`: `(decimal)Math.Floor(...)` is an integral value far below 1e15, so the cast is exact.\n- `MidPrice.Mid`: `Math.Round(x, 8)` uses the default `ToEven` mode, so a value already on the grid stays where it is.\n- `MidPrice.SpreadBps`: `Math.Round(..., 2, AwayFromZero)` is also nearest-rounding, so it needs no change.\n- `FeeSchedule.TakerFee`: pure decimal arithmetic."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 0.7714285714285715,
+            "passed": false,
+            "turns": 5,
+            "costUsd": 0.1570763,
+            "judgeCostUsd": 0.0004406999999999998,
+            "durationSeconds": 68,
+            "startedAt": "2026-10-26T16:55:13.325Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-hXQeqy/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Ranking.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Volatility.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "`./test.sh` now passes 27/27 on both net10.0 and net11.0, and the summary reports `tests-unchanged`. Before the change, net11.0 had 14 failures and net10.0 had 1.\n\nThe sandbox denied network access to nuget.org and builds.dotnet.microsoft.com during the build. The build and tests still ran, so I left that alone.\n\n**Cause:** on .NET 11, `(decimal)someDouble` converts the exact binary value instead of rounding to 15 significant digits. `0.0003` becomes `0.00029999…`, and `Math.Round(double, digits, ToNegativeInfinity/ToPositiveInfinity)` sees the same binary error. I added `ToDecimal(this double)` in `src/Desk.Core/DoubleExtensions.cs`. It goes through `\"G15\"` and `decimal.Parse`, which gives the pre-.NET 11 behavior on every runtime.\n\n**Conversions and roundings, by file:**\n- `Fees/FeeSchedule.cs`, `TakerRate`: `(decimal)0.0004` became the literal `0.0004m`. This was the net10.0 failure, and the literal is exact on both frameworks.\n- `Fees/FeeSchedule.cs`, `RoundToCents`: the round trip `(decimal)Math.Round((double)amount, 2)` became `decimal.Round(amount, 2)`. It keeps the same banker's rounding, and the amount no longer passes through binary floating point.\n- `Pricing/PriceRounding.cs`, `Bid` and `Ask`: directed `Math.Round` on a double is now exact, so `24409.10` floored to `24409.09`. Both now round `price.ToDecimal()` with the same mode and cast the result back to double.\n- `Pricing/TickInfo.cs`: the `Scale` of the decimal now comes from `ToDecimal()`, so `0.01` gives 2 and not 18 or so.\n- `Orders/LotSizer.cs`: `requested` goes through `ToDecimal()` before the floor divide, which fixes the lot-size failures.\n- `Reports/PnlReport.cs`: `(price * qty).ToDecimal()` before `decimal.Round(…, 2)`, which fixes the `2.675` midpoint case.\n- `Analytics/FillStats.cs`, `Analytics/Volatility.cs`, `Analytics/Ranking.cs`, `Diagnostics/LatencyLog.cs`, `Orders/OrderText.cs`, `Risk/BalanceCheck.cs`: same `(decimal)double` cast, now `ToDecimal()`. Their tests already passed. The change keeps midpoint cases, tie ordering, formatted text and balance comparisons the same as before.\n\n**Looked at and left alone:**\n- `Pricing/MidPrice.cs`: `Math.Round(double, 8)` and the `AwayFromZero` round to 2 digits stay in double the whole way, with no decimal conversion. They have no tests, and I didn't confirm whether .NET 11 changes their results.\n- `Time/Buckets.cs`: `(decimal)Math.Floor(x)` casts a whole number, which converts exactly on both runtimes.\n- `Quote.cs`: this is `double.Parse` only, with no decimal conversion.\n- `Volatility.cs`, `Math.Sqrt` and `Average`: these are double-only and unaffected.\n\n`Desk.Core` still targets only net10.0. The net11.0 tests run it on the .NET 11 runtime, and I didn't retarget it."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.8285714285714286,
+            "passed": false,
+            "turns": 11,
+            "costUsd": 0.25149520000000003,
+            "judgeCostUsd": 0.0004925999999999993,
+            "durationSeconds": 822,
+            "startedAt": "2026-10-26T16:55:21.258Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-Fibgl7/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Volatility.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 5x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "All 27 tests now pass on both net10.0 and net11.0, and the test sources are unchanged (`tests-unchanged`).\n\n**The cause.** .NET 11 converts a `double` to `decimal` exactly. Before, it rounded to 15 significant digits. So `(decimal)24409.10` now gives `24409.099999999999…` instead of `24409.1`. I added `src/Desk.Core/DecimalConvert.cs` with `FromDouble`, which formats the value with `G15` and parses it as a decimal. That keeps the old 15-digit behavior on both runtimes.\n\n**Every conversion and rounding I looked at**\n\n| Location | What I did |\n|---|---|\n| `FeeSchedule.TakerRate`, `(decimal)0.0004` | Changed to the literal `0.0004m`. This was the one failure on net10 too. |\n| `FeeSchedule.RoundToCents`, decimal → double → `Math.Round` → decimal | Changed to `decimal.Round(amount, 2)`. A decimal never needed to go through a double. Exact ties like 2.675 now round to 2.68 rather than depending on binary error. |\n| `FillStats.FillPercent`, `(decimal)(filled/requested)` rounded to 1 place | Now uses `FromDouble`. A quotient like 0.1035 would otherwise round differently on .NET 11. |\n| `Volatility.Annualized`, cast then round to 4 places | Now uses `FromDouble`. |\n| `PnlReport.Notional`, cast then round to 2 places | Now uses `FromDouble`. This fixes the 2.675 case. |\n| `LotSizer.ToLots`, `(decimal)requested` | Now uses `FromDouble`. |\n| `TickInfo.Decimals`, `.Scale` of the cast | Now uses `FromDouble`. Without it the scale came out as 28-ish digits. |\n| `BalanceCheck.CanSell`, `(decimal)available >= required` | Now uses `FromDouble`, so a balance isn't compared against its binary noise. |\n| `LatencyLog.Line`, `(decimal)ms:F2` | Now uses `FromDouble`. Otherwise values like 2.675 would print as 2.67 instead of 2.68. |\n| `OrderText.Limit`, `(decimal)qty` and `(decimal)price` in the text | Now uses `FromDouble`, so the text shows `0.0003` and not a long exact expansion. |\n| `PriceRounding.Bid` and `Ask`, `Math.Round(double, digits, ToNegativeInfinity/ToPositiveInfinity)` | Now round a `FromDouble` decimal with `decimal.Round` and convert back to double. On net11 the double directed rounding was exact, so `24409.10` floored to `24409.09`. |\n| `Ranking.ByScore`, `(decimal)` as a sort key | Left alone. The cast never changes the order, only which near-equal scores tie, and exact comparison is arguably more correct. |\n| `Buckets.MinuteStart`, `(decimal)Math.Floor(...)` | Left alone. A whole number converts the same either way. |\n| `MidPrice.Mid` and `SpreadBps`, double `Math.Round` with 8 and 2 places | Left alone. They stay in double, and the tests pass on both frameworks. I did not check them against ties beyond what the tests cover. |\n| `Quote.Parse`, `double.Parse` with the invariant culture | Left alone. It isn't a decimal conversion and doesn't depend on the framework. |\n\n**Core stays on net10.0.** I tried making `Desk.Core` target both `net10.0` and `net11.0`, but the build then failed in this sandbox: MSBuild couldn't create its worker sockets (permission denied). I reverted that, so `Desk.Core` stays on `net10.0`. It still runs on the .NET 11 runtime from the net11.0 tests, so the behavior change applies. If you want it to target `net11.0` as well, that needs a build environment that allows MSBuild worker sockets."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.8285714285714286,
+            "passed": false,
+            "turns": 6,
+            "costUsd": 0.15488330000000003,
+            "judgeCostUsd": 0.0006321000000000002,
+            "durationSeconds": 68,
+            "startedAt": "2026-10-26T16:55:32.898Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-otbKgd/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Volatility.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "All 27 tests now pass on both net10.0 and net11.0, and `tests-unchanged` is reported. The sandbox denied network access to nuget.org and builds.dotnet.microsoft.com during the run. The build still worked offline.\n\n**Root cause:** .NET 11 converts `double` to `decimal` using the exact binary value. Earlier versions rounded to 15 significant digits first. So `(decimal)2.675` is now `2.67499999…`. That is why 14 tests failed on net11.0. `Math.Round(double, n, ToNegativeInfinity/ToPositiveInfinity)` also behaves differently now.\n\n**Fix:** I added `src/Desk.Core/DecimalConvert.cs` with `FromDouble`. It parses the value after formatting it with `G15`, which reproduces the old results on every framework.\n\n**Every conversion or rounding I looked at:**\n- `FillStats.FillPercent`: `(decimal)` conversion changed to `FromDouble`. Its tests passed before, but the rounding could land on the wrong side at a boundary.\n- `Volatility.Annualized`: `(decimal)` conversion changed to `FromDouble`, for the same reason.\n- `Ranking.ByScore`: the `(decimal)` conversion is only a sort key. Exact conversion preserves order, so I left it unchanged. The only difference is that scores within about 1e-15 of each other no longer tie.\n- `LatencyLog.Line`: changed to `FromDouble`. Without it, a value like 2.675 would print `2.67` instead of `2.68` with `F2`.\n- `FeeSchedule.TakerRate`: `(decimal)0.0004` changed to `0.0004m`. The compiler folded that cast into an inexact constant, so this test failed on net10.0 as well. It was the one failure on net10.0.\n- `FeeSchedule.RoundToCents`: it was rounding through `double`. It now uses `decimal.Round(amount, 2, ToEven)`, which is the same as the old default `Math.Round` behaviour.\n- `LotSizer.ToLots`: changed to `FromDouble`.\n- `OrderText.Limit`: both the quantity and the price changed to `FromDouble`. Otherwise it would print `0.00029999999999999997` instead of `0.0003`.\n- `TickInfo.Decimals`: the `(decimal).Scale` conversion changed to `FromDouble`.\n- `PnlReport.Notional`: changed to `FromDouble` before `decimal.Round`.\n- `BalanceCheck.CanSell`: changed to `FromDouble`. Without it, an available balance of `0.3` would fall just short of a required `0.3m`.\n- `PriceRounding.Bid` and `PriceRounding.Ask`: they now convert through `FromDouble`, round with `decimal.Round` in the same direction, and convert back to `double`.\n- `Buckets.MinuteStart`: the converted value is already a whole number from `Math.Floor`, so the conversion is exact either way. Unchanged.\n- `MidPrice.Mid` and `MidPrice.SpreadBps`: these use `Math.Round` on `double` with the default or `AwayFromZero` mode and no decimal conversion. No test covers them. I left them unchanged, but I haven't checked whether .NET 11 changes their `double` rounding.\n- `Quote.Parse`: this uses `double.Parse` with the invariant culture, so the culture doesn't matter. Unchanged."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1,
+        "scoreWithout": 0.8095238095238096,
+        "passRateWithout": 0,
+        "delta": 0.19047619047619035
+      }
+    },
+    {
+      "name": "no-op",
+      "dir": "claude-plugin-eval/evals/no-op",
+      "source": "mixed",
+      "promptMarkdown": "This solution is moving to .NET 11.\nIts test project already targets net10.0 and net11.0, and global.json uses the .NET 11 SDK.\nMake the code behave correctly on .NET 11, keep the results the tests describe, and change only what needs to change.\nBuild and test with `./test.sh`, which runs both frameworks and writes TestResults/summary.txt.\nUse `./dotnet` instead of `dotnet` for any other SDK command; it keeps the SDK's files inside this folder.\nDo not change the tests.\nWhen you are done, list every conversion or rounding you looked at and what you did with it.",
+      "runsPerCase": 3,
+      "timeoutSeconds": 1800,
+      "maxTurns": 80,
+      "graders": [
+        {
+          "name": "keep-fill-percent",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/FillStats.cs"
+            },
+            "pattern": "decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-latency-log",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Diagnostics/LatencyLog.cs"
+            },
+            "pattern": "\\{\\(decimal\\)ms:F2\\}",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-mid-price",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Pricing/MidPrice.cs"
+            },
+            "pattern": "Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-minute-buckets",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Time/Buckets.cs"
+            },
+            "pattern": "\\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-ranking",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/Ranking.cs"
+            },
+            "pattern": "OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-volatility",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/Volatility.cs"
+            },
+            "pattern": "decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "no-new-source",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "files",
+            "pattern": "src/Desk\\.Core/(?!obj/|bin/)\\S*\\.cs",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "no-peek",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "claude-plugin-eval|fixture-patches|golden\\.patch|blanket\\.patch|/graders/",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "ran-tests",
+          "type": "tool_used",
+          "weight": 0.5,
+          "config": {
+            "tool": "Bash",
+            "input_match": "test\\.sh",
+            "min": 1,
+            "arm": "both"
+          }
+        },
+        {
+          "name": "report",
+          "type": "llm",
+          "weight": 1,
+          "graderMarkdown": "Judge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.\nPASS if it concludes that no source change is needed for .NET 11, or that the only differences are in display values or statistics that nothing depends on, and it names the conversions it checked.\nFAIL if it reports changing source code to route conversions through a helper.",
+          "config": {
+            "criteria": "Judge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.\nPASS if it concludes that no source change is needed for .NET 11, or that the only differences are in display values or statistics that nothing depends on, and it names the conversions it checked.\nFAIL if it reports changing source code to route conversions through a helper.",
+            "focus": "last_message"
+          }
+        },
+        {
+          "name": "tests-net10",
+          "type": "regex",
+          "weight": 2,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "net10\\.0 total=6 passed=6 failed=0",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "tests-net11",
+          "type": "regex",
+          "weight": 3,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "net11\\.0 total=6 passed=6 failed=0",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "tests-unchanged",
+          "type": "regex",
+          "weight": 2,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "^tests-unchanged$",
+            "flags": "m",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 7,
+            "costUsd": 0.10895250000000001,
+            "judgeCostUsd": 0.00037650000000000053,
+            "durationSeconds": 43,
+            "startedAt": "2026-10-26T16:56:21.581Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-nOEMio/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-new-source",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 2x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "I made no code changes. Every site is one .NET 11 doesn't break, and `./test.sh` passes on both frameworks without edits: net10.0 6/6, net11.0 6/6, `tests-unchanged`.\n\nThe build tried to reach nuget.org and builds.dotnet.microsoft.com during the run, and the sandbox denied it. It didn't affect the result, since the build and tests completed.\n\nI searched `src` for double/float-to-decimal casts, `Convert.ToDecimal`, `new decimal(`, `decimal.Create*` and `Math.Round`/`MathF.Round`/`double.Round`. There are no JSON readers, constant casts or `Convert.ToDecimal(object)` calls.\n\n| File | Expression | Source | Sink | Action |\n|---|---|---|---|---|\n| `Analytics/FillStats.cs:5` | `(decimal)(filled / requested)`, then `decimal.Round(…*100m, 1)` | computed ratio | nearest round | Kept. The change is only in the 16th digit or later. A value landing exactly on a .x5 midpoint could round differently, which I accept because nothing downstream depends on it. The 3/7, 1/3 and 50/200 test cases pass on both frameworks. |\n| `Analytics/Ranking.cs:6` | `(decimal)s.Value` in `OrderByDescending` | computed scores | ordering | Kept. The cast is monotonic, so ordering is unaffected. |\n| `Analytics/Volatility.cs:10` | `(decimal)(stdDev * Math.Sqrt(365))`, then `decimal.Round(…, 4)` | computed volatility | nearest round to 4 places | Kept. The value has no exact decimal answer, and the test expects 0.2536 on both frameworks. |\n| `Diagnostics/LatencyLog.cs:5` | `(decimal)ms:F2` | measured latency | fixed-format display | Kept. A 16th-digit difference doesn't show in `:F2`. |\n| `Time/Buckets.cs:5` | `(decimal)Math.Floor(seconds / 60)` | computed, integral | integral value below 1e15 | Kept. An integral double converts exactly. |\n| `Pricing/MidPrice.cs:5` | `Math.Round((bid + ask) / 2, 8)` | computed | no mode argument | Kept. It's the two-argument overload, which .NET 11 didn't change. |\n| `Pricing/MidPrice.cs:7` | `Math.Round(…, 2, MidpointRounding.AwayFromZero)` | computed spread in bps | nearest round | Kept. AwayFromZero is a nearest mode, not directed. The value is a computed ratio rather than a decimal someone wrote, so .NET 11 changes nothing that matters. |\n\nI didn't add a `FloatingPoint.ToDecimal` helper. No site needs it, and adding one would hide which sites depend on decimal precision."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 5,
+            "costUsd": 0.0975531,
+            "judgeCostUsd": 0.0003939,
+            "durationSeconds": 39,
+            "startedAt": "2026-10-26T16:56:40.586Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-p2lkbG/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-new-source",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 2x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "I made no code changes. Every conversion and rounding in the solution is one where .NET 11's change can't affect the result. `./test.sh` passes on both frameworks (net10.0 and net11.0: 6 of 6 each), and the summary reports `tests-unchanged`.\n\nThe build reported denied network calls to nuget.org and builds.dotnet.microsoft.com, but it still restored and ran. It did not need them.\n\nI found the sites with a grep for casts, `Convert.ToDecimal`, `new decimal(`, `decimal.Create*`, `Round(` and `Value<decimal>`. I also read `Quote.cs`, which has no conversion sites. Each site below is kept as written.\n\n| File and expression | Source | Sink | Action |\n|---|---|---|---|\n| `FillStats.cs`: `(decimal)(filled / requested) * 100m`, then `decimal.Round(..., 1)` | Computed ratio | Nearest round to 1 decimal | Kept. A computed ratio has no exact decimal answer, and the tests cover 42.9, 33.3 and 25.0. |\n| `Ranking.cs`: `OrderByDescending(s => (decimal)s.Value)` | Scores | Sort order only | Kept. The cast only feeds an ordering. |\n| `Volatility.cs`: `(decimal)(stdDev * Math.Sqrt(365))`, then `decimal.Round(..., 4)` | Computed from a standard deviation | Nearest round to 4 decimals | Kept. A statistic rounded to nearest. |\n| `LatencyLog.cs`: `(decimal)ms:F2` | Measured latency | Fixed-format display | Kept. `:F2` display is insensitive. |\n| `Buckets.cs`: `(decimal)Math.Floor(seconds / 60) * 60m` | `Math.Floor` result | Integral value | Kept. The value is a whole number far below 1e15, so the cast is exact. |\n| `MidPrice.cs`: `Math.Round((bid + ask) / 2, 8)` | Computed | Default `ToEven` rounding | Kept. The 2-argument overload has no directed mode, so it is not the .NET 11 case. |\n| `MidPrice.cs`: `Math.Round(..., 2, MidpointRounding.AwayFromZero)` | Computed spread in basis points | Nearest round | Kept. It is a nearest round of a computed value, not a directed one. |\n\n- **Not conversions:** `Quote.Parse` only calls `double.Parse`, and `Quote` holds doubles.\n- **Other APIs:** the code has no constant decimal casts, `Convert.ToDecimal`, `new decimal(double)`, `decimal.Create*` or JSON `Value<decimal>`.\n- **Midpoint edge case:** the rounded values are computed, so a last-digit difference at an exact midpoint in `FillPercent`, `Annualized` or `SpreadBps` would be acceptable. Nothing downstream depends on that digit.\n- **No helper added:** I didn't add a `FloatingPoint.ToDecimal` helper, since no site needs one."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 5,
+            "costUsd": 0.10677140000000002,
+            "judgeCostUsd": 0.00042540000000000026,
+            "durationSeconds": 45,
+            "startedAt": "2026-10-26T16:57:04.138Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-QY9fVJ/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-new-source",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 2x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "No code changes were needed. `./test.sh` passes on both frameworks: net10.0 6/6 and net11.0 6/6, with `tests-unchanged`. Every site either can't see the 16th-digit change or is a deliberate keep.\n\nUnder the sandbox, the build tried to reach api.nuget.org and builds.dotnet.microsoft.com and was denied. The restore and test runs still completed.\n\n**Conversions and roundings I looked at (all kept as they are)**\n\n| File | Expression | Source → sink | Decision |\n|---|---|---|---|\n| `Analytics/FillStats.cs:5` | `(decimal)(filled / requested) * 100m`, then `decimal.Round(.., 1)` | computed ratio → nearest round | Keep. The tests (3/7, 1/3, 50/200) pass on both runtimes. |\n| `Analytics/Ranking.cs:6` | `(decimal)s.Value` in `OrderByDescending` | score → ordering only | Keep. Only the order is used, and the exact conversion is at least as faithful. |\n| `Analytics/Volatility.cs:10` | `(decimal)(stdDev * Math.Sqrt(365))`, then `decimal.Round(.., 4)` | computed statistic → nearest round | Keep. There is no exact decimal answer, and the test passes on both runtimes. |\n| `Diagnostics/LatencyLog.cs:5` | `(decimal)ms:F2` | measurement → fixed-format display | Keep. The tests (12.3456, 0.5) pass on both runtimes. |\n| `Time/Buckets.cs:5` | `(decimal)Math.Floor(seconds / 60) * 60m` | integral value → decimal arithmetic | Keep. An integral value below 1e15 converts identically. |\n| `Pricing/MidPrice.cs:5` | `Math.Round((bid + ask) / 2, 8)` | price average → nearest round (default ToEven) | Keep. It is a nearest round with no directed mode. |\n| `Pricing/MidPrice.cs:7` | `Math.Round(.., 2, MidpointRounding.AwayFromZero)` | computed bps ratio → nearest round | Keep. It is computed and rounds to nearest, not directed. |\n| `Quote.cs` | `double.Parse` | text → double | Not a decimal conversion or rounding, so there is nothing to change. |\n\nI found no constant casts, `Convert.ToDecimal`, `new decimal(double)`, `decimal.Create*`, JSON decimal readers, or directed `Math.Round` modes (ToNegativeInfinity, ToPositiveInfinity, ToZero). I did not add a `FloatingPoint.ToDecimal` helper, since nothing needs it.\n\n**Two accepted risks**\n- `MidPrice.Mid` (line 5) has no test. If the bid and ask average lands exactly on a 9th-digit midpoint, such as 0.000000015, the result can differ by one unit in the 8th digit on .NET 11. I accepted this because those values are rare and the sink is a nearest round of an average. If you need exact decimal behaviour there, the fix is `(double)decimal.Round(FloatingPoint.ToDecimal(x), 8)`.\n- `FillPercent` could in principle differ on an exact tenth-of-a-percent midpoint on a non-binary-exact ratio. No test covers that, and the value is a display statistic."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 0.6363636363636364,
+            "passed": false,
+            "turns": 9,
+            "costUsd": 0.18118420000000002,
+            "judgeCostUsd": 0.0003661999999999997,
+            "durationSeconds": 93,
+            "startedAt": "2026-10-26T16:57:19.416Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-PJJB4T/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Ranking.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Volatility.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-new-source",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern found (expected absent)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 5x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": false,
+                "weight": 1,
+                "explanation": "judge votes: FAIL FAIL FAIL",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  false,
+                  false,
+                  false
+                ],
+                "evidence": "The code now gives the same results on .NET 10 and .NET 11. `./test.sh` shows 6/6 passing on both frameworks and `tests-unchanged`. The existing tests passed on both before I changed anything, so they don't exercise the change. I checked it with a throwaway probe program in `$TMPDIR` (not in the repo) that ran the conversions on both runtimes.\n\n**What changed in .NET 11:** `(decimal)someDouble` used to round to 15 significant digits. It now converts the exact binary value. For example, `2.675` was `2.675` and is now `2.67499999…`, so half-way roundings flip. In the probe, `2.675` formatted to 2 decimals gave `2.68` on .NET 10 and `2.67` on .NET 11.\n\n**The fix:** I added `src/Desk.Core/DoubleConversion.cs` with `ToDecimal(double)`. It round-trips the value through `\"G15\"` in the invariant culture, which reproduces the old 15-digit behavior on every runtime.\n\n**Every conversion or rounding I looked at:**\n- `FillStats.FillPercent`: the `(decimal)(filled / requested)` cast now uses `ToDecimal`. The `decimal.Round(…, 1)` stays, since decimal rounding is unchanged.\n- `Volatility.Annualized`: the `(decimal)` cast now uses `ToDecimal`. The `decimal.Round(…, 4)` stays.\n- `Ranking.ByScore`: the `(decimal)s.Value` sort key now uses `ToDecimal`. Without it, scores that differ only past the 15th digit stopped tying on .NET 11, which reorders the ranking.\n- `LatencyLog.Line`: the `(decimal)ms` cast now uses `ToDecimal`. The `:F2` formatting stays, with the invariant culture already in place.\n- `Buckets.MinuteStart`: I left it alone. `Math.Floor` returns a whole number, so the cast is exact on both runtimes below about 1e15 seconds. Above that the results differ, but .NET 11's exact value is the more correct one and no realistic input gets there.\n- `MidPrice.Mid` and `SpreadBps`: unchanged. They use `Math.Round` on doubles with no decimal conversion, and `AwayFromZero` is explicit.\n- `Quote.Parse`: unchanged. `double.Parse` with the invariant culture behaves the same on both runtimes.\n\nI didn't touch the tests, `global.json` or the project files."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.6363636363636364,
+            "passed": false,
+            "turns": 5,
+            "costUsd": 0.131166,
+            "judgeCostUsd": 0.0005108000000000005,
+            "durationSeconds": 66,
+            "startedAt": "2026-10-26T16:57:49.148Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-9XUHIJ/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Ranking.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Volatility.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-new-source",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern found (expected absent)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": false,
+                "weight": 1,
+                "explanation": "judge votes: FAIL FAIL FAIL",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  false,
+                  false,
+                  false
+                ],
+                "evidence": "On .NET 11, `(decimal)` applied to a double converts the exact binary value. Earlier runtimes rounded to 15 significant digits first. For example, `(decimal)0.285` is now `0.28499999…` rather than `0.285`. I fixed the four places that depend on this. After the changes, `./test.sh` passes 6/6 on net10.0 and net11.0, and the summary reports `tests-unchanged`.\n\nThe tests already passed on net11.0 before my changes, because their inputs don't land on rounding boundaries. The bug only shows up on boundary values, such as a fill ratio of 0.2855 or a latency of 1.005. I confirmed the conversion change with a small throwaway program on the 11 SDK. I did not add a boundary-value test, since the tests were off limits.\n\n**The fix:** I added `src/Desk.Core/DecimalConvert.cs` with `FromDouble`. It rounds to 15 significant digits (`G15`) and parses the result as a decimal, which reproduces the old conversion on every runtime.\n\n**Conversions and roundings I looked at:**\n- **`FillStats.FillPercent`**: `(decimal)(filled / requested)` followed by `decimal.Round(…, 1)`. I switched the cast to `FromDouble`. Without it, ratios near a half-percent boundary would round differently. I left the `decimal.Round` call as it was, so it still rounds half to even.\n- **`Ranking.ByScore`**: the `(decimal)s.Value` sort key. I switched it to `FromDouble`. Scores that differ only past 15 digits (`0.1+0.2` against `0.3`) were ties that kept input order. Exact conversion would break those ties and reorder the results.\n- **`Volatility.Annualized`**: `(decimal)(stdDev * √365)` followed by `decimal.Round(…, 4)`. I switched the cast to `FromDouble`, which keeps the 4-decimal rounding stable at boundaries.\n- **`LatencyLog.Line`**: `(decimal)ms` formatted with `:F2`. I switched the cast to `FromDouble`. Without it, `1.005` would now print `1.00` instead of `1.01`.\n- **`Buckets.MinuteStart`**: `(decimal)Math.Floor(…) * 60m`. I left it alone. The floored value is a whole number, so it converts exactly on every runtime.\n- **`MidPrice.Mid`**: `Math.Round(…, 8)` on doubles. Left unchanged because there is no decimal conversion, and I found nothing that changed in .NET 11.\n- **`MidPrice.SpreadBps`**: `Math.Round(…, 2, MidpointRounding.AwayFromZero)` on doubles. Left unchanged for the same reason. Its rounding mode is explicit, so it doesn't depend on a default.\n- **`Quote.Parse`**: `double.Parse` with `InvariantCulture`. This is a parse, not a conversion, and the culture is explicit, so I left it alone.\n\nThe sandbox blocked network access to nuget.org and builds.dotnet.microsoft.com during the builds. The restore and test runs still worked from the local cache."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.6363636363636364,
+            "passed": false,
+            "turns": 7,
+            "costUsd": 0.1897405,
+            "judgeCostUsd": 0.0003974999999999994,
+            "durationSeconds": 101,
+            "startedAt": "2026-10-26T16:58:52.209Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-KcZVj2/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Pricing/MidPrice.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Ranking.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-new-source",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern found (expected absent)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": false,
+                "weight": 1,
+                "explanation": "judge votes: FAIL FAIL FAIL",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  false,
+                  false,
+                  false
+                ],
+                "evidence": "Both frameworks pass 6/6 and the tests are unchanged. The tests passed before my change too, so they don't cover the .NET 11 differences. I found those by running the conversions on both runtimes in a scratch project. I didn't run the new code on any of the tie cases, such as `1.005` or `1.000000015`.\n\n**What changed in .NET 11**\n- `(decimal)double` is now exact. On .NET 10 it rounded to 15 significant digits, so `1.005` became `1.005m`. On .NET 11 it becomes `1.004999…`.\n- `Math.Round(double, digits)` now rounds the exact binary value. `Math.Round(2.675, 2)` gave 2.68 on .NET 10 and gives 2.67 on .NET 11.\n\n**Fix:** I added `src/Desk.Core/DecimalCompat.cs` with `ToDecimal` and `Round`. `ToDecimal` reads a double as its 15 significant digits. `Round` rounds that decimal value, and falls back to `Math.Round` for non-finite or huge values. Both keep the .NET 10 results on .NET 11.\n\n**Every conversion or rounding I looked at**\n- **`FillStats.FillPercent`**: `(decimal)` cast followed by `decimal.Round(…, 1)`. Changed to `ToDecimal`, because exact conversion can flip a one-decimal tie.\n- **`Ranking.ByScore`**: `(decimal)` cast used as a sort key. Changed to `ToDecimal`. Without that, scores that are equal to 15 digits, like `0.1+0.2` and `0.3`, would stop tying and reorder.\n- **`LatencyLog.Line`**: `(decimal)ms` formatted with `F2`. Changed to `ToDecimal`. On .NET 11, `1.005` would have printed `1.00` instead of `1.01`.\n- **`MidPrice.Mid`**: `Math.Round(x, 8)`. Changed to `DecimalCompat.Round`, because midpoints of 8-digit prices are often exact ties at the ninth digit.\n- **`MidPrice.SpreadBps`**: `Math.Round(x, 2, AwayFromZero)`. Changed to `DecimalCompat.Round` for the same reason.\n- **`Volatility.Annualized`**: `(decimal)` cast followed by `decimal.Round(…, 4)`. Left as is. The input is a computed `Math.Sqrt` result, so a tie at the fifth decimal would only show up within about 1e-15 of it. That is a theoretical difference, not a practical one.\n- **`Buckets.MinuteStart`**: `(decimal)Math.Floor(…)`. Left as is, because a whole-number double converts exactly on both runtimes.\n- **`Quote.Parse`**: `double.Parse` with `InvariantCulture`. Left as is. It has no decimal conversion or rounding and is culture-safe.\n\nThe scratch probe project is in `$TMPDIR`, outside the repo. The sandbox blocks network access to NuGet, so I set `UseAppHost=false` in that probe to avoid downloading the apphost package."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=6 passed=6 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 1,
+        "passRate": 1,
+        "scoreWithout": 0.6363636363636364,
+        "passRateWithout": 0,
+        "delta": 0.36363636363636365
+      }
+    },
+    {
+      "name": "symptom",
+      "dir": "claude-plugin-eval/evals/symptom",
+      "source": "mixed",
+      "promptMarkdown": "We moved our order service to .NET 11 and two things broke.\nThe venue now refuses some orders with `qty=0.0002999999999999999737189393: too many decimals`, and some passive bids rest one tick below the price we meant.\nThe solution is in this folder, and its tests target net10.0 and net11.0.\nFind the cause and fix it everywhere it applies, without touching code that is fine.\nBuild and test with `./test.sh`, which runs both frameworks and writes TestResults/summary.txt.\nUse `./dotnet` instead of `dotnet` for any other SDK command; it keeps the SDK's files inside this folder.\nDo not change the tests.\nFinish with what you changed, and what you checked and left alone.",
+      "runsPerCase": 3,
+      "timeoutSeconds": 1800,
+      "maxTurns": 80,
+      "graders": [
+        {
+          "name": "fixed-balance-check",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Risk/BalanceCheck.cs"
+            },
+            "pattern": "\\(decimal\\)available",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "fixed-order-text",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Orders/OrderText.cs"
+            },
+            "pattern": "\\(decimal\\)(qty|price)",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "keep-fill-percent",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/FillStats.cs"
+            },
+            "pattern": "decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-latency-log",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Diagnostics/LatencyLog.cs"
+            },
+            "pattern": "\\{\\(decimal\\)ms:F2\\}",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-mid-price",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Pricing/MidPrice.cs"
+            },
+            "pattern": "Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-minute-buckets",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Time/Buckets.cs"
+            },
+            "pattern": "\\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-ranking",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/Ranking.cs"
+            },
+            "pattern": "OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "keep-volatility",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "src/Desk.Core/Analytics/Volatility.cs"
+            },
+            "pattern": "decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "no-peek",
+          "type": "regex",
+          "weight": 1,
+          "config": {
+            "target": "trace",
+            "pattern": "claude-plugin-eval|fixture-patches|golden\\.patch|blanket\\.patch|/graders/",
+            "flags": "",
+            "match": "not_contains"
+          }
+        },
+        {
+          "name": "ran-tests",
+          "type": "tool_used",
+          "weight": 0.5,
+          "config": {
+            "tool": "Bash",
+            "input_match": "test\\.sh",
+            "min": 1,
+            "arm": "both"
+          }
+        },
+        {
+          "name": "report",
+          "type": "llm",
+          "weight": 1,
+          "graderMarkdown": "Judge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.\nPASS if it explains the cause of both symptoms, says what was changed and how, and names conversions it checked and left unchanged, with a reason for each.\nFAIL if it does not mention looking beyond the two symptoms, or names no conversion it left unchanged.",
+          "config": {
+            "criteria": "Judge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.\nPASS if it explains the cause of both symptoms, says what was changed and how, and names conversions it checked and left unchanged, with a reason for each.\nFAIL if it does not mention looking beyond the two symptoms, or names no conversion it left unchanged.",
+            "focus": "last_message"
+          }
+        },
+        {
+          "name": "tests-net10",
+          "type": "regex",
+          "weight": 2,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "net10\\.0 total=27 passed=27 failed=0",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "tests-net11",
+          "type": "regex",
+          "weight": 3,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "net11\\.0 total=27 passed=27 failed=0",
+            "flags": "",
+            "match": "contains"
+          }
+        },
+        {
+          "name": "tests-unchanged",
+          "type": "regex",
+          "weight": 2,
+          "config": {
+            "target": {
+              "source": "file",
+              "path": "TestResults/summary.txt"
+            },
+            "pattern": "^tests-unchanged$",
+            "flags": "m",
+            "match": "contains"
+          }
+        }
+      ],
+      "arms": {
+        "with": [
+          {
+            "score": 0.9428571428571428,
+            "passed": false,
+            "turns": 7,
+            "costUsd": 0.13321650000000002,
+            "judgeCostUsd": 0.0004074999999999999,
+            "durationSeconds": 51,
+            "startedAt": "2026-10-26T16:58:54.734Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-sgll5s/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 2x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": false,
+                "weight": 1,
+                "explanation": "judge votes: FAIL FAIL PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  false,
+                  false,
+                  true
+                ],
+                "evidence": "Both symptoms are fixed. `./test.sh` now passes 27/27 on net10.0 and 27/27 on net11.0, and the summary says `tests-unchanged`.\n\nThe sandbox blocked outbound calls to nuget.org and builds.dotnet.microsoft.com during the runs. The tests ran anyway.\n\n## Cause\n.NET 11 turns a `double` into a `decimal` using its exact binary value. So `(decimal)0.0003` gives `0.0002999999999999999737189393` instead of `0.0003`. `Math.Round(double, digits, mode)` also rounds the exact binary value now, so a bid of 24409.10 stored as 24409.09999… floors to 24409.09. The first change causes the \"too many decimals\" refusals and the second causes the bids one tick low.\n\n## What I changed\nI added `FloatingPoint.ToDecimal(double)` in `src/Desk.Core/FloatingPoint.cs`. It converts through 15 significant digits, which matches .NET 10's behaviour.\n\n| File | Change |\n|---|---|\n| `Orders/OrderText.cs` | Qty and price now go through the helper before they are sent. This is the refused-order bug. |\n| `Pricing/PriceRounding.cs` | `Bid` and `Ask` now compute `(double)decimal.Round(ToDecimal(price), decimals, mode)`. This is the bid-one-tick-low bug. |\n| `Orders/LotSizer.cs` | The helper is applied before the floor. |\n| `Pricing/TickInfo.cs` | The helper is applied before reading `Scale`. |\n| `Risk/BalanceCheck.cs` | The helper is applied before comparing against a decimal. |\n| `Reports/PnlReport.cs` | `Notional` applies the helper before rounding to cents. Without it, 2.675 rounded to 2.67 on net11.0. That was the one failing test after my first pass. |\n| `Fees/FeeSchedule.cs` | `TakerRate` is now the literal `0.0004m`. `RoundToCents` is now `decimal.Round(amount, 2)`, so the value no longer goes through a double. |\n\n## What I checked and left alone\n- `Analytics/FillStats.cs`: a ratio of computed values, rounded to nearest. The 16th digit can't matter.\n- `Analytics/Volatility.cs`: a computed value, rounded to nearest.\n- `Analytics/Ranking.cs`: the cast is only used for ordering.\n- `Diagnostics/LatencyLog.cs`: the cast is only used for `:F2` display.\n- `Time/Buckets.cs`: the cast is applied to a `Math.Floor` result, which is a whole number far below 1e15, so it converts exactly.\n- `Pricing/MidPrice.cs`: `Math.Round(x, 8)` uses the default `ToEven`. `SpreadBps` uses `AwayFromZero`. Neither is a directed mode, so they don't hit the .NET 11 change. Spread values sitting exactly on a midpoint could still round differently on net11.0. Nothing downstream depends on that, so I left it.\n- `Quote.cs`: it only parses text to double, which is unchanged.\n- The tests were not modified."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.9428571428571428,
+            "passed": false,
+            "turns": 7,
+            "costUsd": 0.13512700000000002,
+            "judgeCostUsd": 0.00038739999999999955,
+            "durationSeconds": 55,
+            "startedAt": "2026-10-26T16:59:46.145Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-4mBi00/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": false,
+                "weight": 1,
+                "explanation": "judge votes: FAIL FAIL PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  false,
+                  false,
+                  true
+                ],
+                "evidence": "Both problems are fixed. `./test.sh` passes 27 of 27 on net10.0 and on net11.0, and the tests are unchanged (`tests-unchanged`).\n\n**Cause.** .NET 11 converts a double to decimal by its exact binary value, so `(decimal)0.0003` is now `0.0002999999999999999737189393`. It also rounds `Math.Round(double, digits, mode)` on the exact binary value, so a price stored as 24409.0999… floors to 24409.09.\n\n**Changed**\n- **Helper:** I added `src/Desk.Core/FloatingPoint.cs`, a `FloatingPoint.ToDecimal(double)` that goes through 15 significant digits and gives the same result on both runtimes.\n- **`OrderText.Limit`:** `qty` and `px` now use the helper. This was the \"too many decimals\" refusal.\n- **`PriceRounding.Bid` and `Ask`:** now `(double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, mode)`. This was the bid resting one tick low, and `Ask` has the same flaw.\n- **`LotSizer.ToLots`:** the floor to the lot step now converts with the helper.\n- **`TickInfo.Decimals`:** the decimal count read from `Scale` now converts with the helper.\n- **`BalanceCheck.CanSell`:** the comparison against a decimal now converts with the helper.\n- **`PnlReport.Notional`:** `price * qty` now goes through the helper before rounding to cents. A test with 2.675 rounded to 2.67 on net11.0 until I changed this.\n- **`FeeSchedule.TakerRate`:** now the literal `0.0004m`.\n- **`FeeSchedule.RoundToCents`:** a decimal was going through a double, so it is now `decimal.Round(amount, 2)`.\n\n**Checked and left alone**\n- **`FillStats.FillPercent` and `Volatility`:** both convert a computed value and round it to nearest, so the last digit doesn't matter.\n- **`Ranking`:** the cast is only used for ordering.\n- **`LatencyLog`:** the cast is only used for `:F2` display.\n- **`Buckets.MinuteStart`:** the cast is applied to a floored integer value, which converts exactly.\n- **`MidPrice.Mid` and `SpreadBps`:** these use `Math.Round(double, digits)` and `Math.Round` with `AwayFromZero`. These don't need a change, and they stay in double math.\n- **`Quote.Parse`:** it only parses doubles and does no decimal conversion.\n\n**Not exercised by any test:** `OrderText`. My first edit to it broke the string so that it printed the placeholder text instead of the values, and all 27 tests still passed. I fixed it by reading the file back, but a test on the text it produces would catch this kind of regression.\n\n**Environment:** the test run printed sandbox denials for network access to nuget.org and builds.dotnet.microsoft.com. They didn't stop the build or tests."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 8,
+            "costUsd": 0.14714880000000002,
+            "judgeCostUsd": 0.00037500000000000033,
+            "durationSeconds": 55,
+            "startedAt": "2026-10-26T17:00:33.594Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-RrzrEP/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 4x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "Both problems are fixed. `./test.sh` now passes 27 of 27 on net10.0 and on net11.0, and it reports the tests unchanged.\n\n**Cause.** .NET 11 converts a double to decimal using its exact binary value, so `(decimal)0.0003` gives `0.0002999999999999999737189393`. It also rounds `Math.Round(double, digits, mode)` on the exact binary value. That produced the \"too many decimals\" qty, and the bids resting a tick low (24409.10 is stored as 24409.0999…, so rounding down gave 24409.09).\n\n**Changed**\n- **`FloatingPoint.cs` (new):** `FloatingPoint.ToDecimal(double)` converts via 15 significant digits and gives the same result on both runtimes.\n- **`OrderText.Limit`:** `qty` and `px` now use the helper. This fixes the refused orders.\n- **`PriceRounding.Bid` and `Ask`:** now `(double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, mode)`. This fixes the low bids, and `Ask` had the same bug.\n- **`LotSizer.ToLots`:** the helper is used before the floor to a lot step.\n- **`TickInfo.Decimals`:** the helper is used before reading `Scale`, which would otherwise return 28.\n- **`BalanceCheck.CanSell`:** the helper is used in the comparison against a decimal.\n- **`PnlReport.Notional`:** `price * qty` goes through the helper. This one is a nearest round, but 2.675 sits exactly on a midpoint (it should round to 2.68). The test caught it, and my first triage had left it alone.\n- **`FeeSchedule.TakerRate`:** `(decimal)0.0004` is now the literal `0.0004m`.\n- **`FeeSchedule.RoundToCents`:** a decimal was going through a double. It is now `decimal.Round(amount, 2)`.\n\n**Checked and left alone**\n- **`FillStats.FillPercent` and `Volatility`:** computed values with a nearest round.\n- **`Ranking.ByScore`:** the cast is only used for ordering.\n- **`LatencyLog.Line`:** `:F2` display only.\n- **`Buckets.MinuteStart`:** the cast is applied to a `Math.Floor` result, which is an exact integer.\n- **`MidPrice.Mid`:** plain `Math.Round(x, 8)` rounds to even.\n- **`MidPrice.SpreadBps`:** `AwayFromZero` on a computed value.\n- **`Quote.Parse`:** it only parses doubles and does no decimal conversion.\n\n**Things to know**\n- The helper throws on NaN and infinity. The old cast threw there too, so behaviour is the same.\n- The build printed a lot of denied-network messages (nuget and the dotnet download host). They didn't stop it, and both test runs completed."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ],
+        "without": [
+          {
+            "score": 0.8857142857142857,
+            "passed": false,
+            "turns": 5,
+            "costUsd": 0.1466425,
+            "judgeCostUsd": 0.00034650000000000045,
+            "durationSeconds": 64,
+            "startedAt": "2026-10-26T17:00:40.671Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-a72DCA/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "Both failures are fixed. `./test.sh` passes 27/27 on net10.0 and 27/27 on net11.0, and it reports `tests-unchanged`. The sandbox blocked some network calls to nuget.org and builds.dotnet.microsoft.com during the runs. They didn't affect the results.\n\n**Cause:** .NET 11 changed `(decimal)someDouble` to convert the exact binary value. Earlier runtimes rounded to 15 significant digits first. So `0.0003` became `0.00029999999999999997…`, which is the `too many decimals` rejection. The same change made `TickInfo.Decimals` report far too many places for a tick like `0.01`. `Math.Round(double, n, ToNegativeInfinity)` then floored a value such as `24409.10` to `24409.09`, which is the bid resting one tick low.\n\n**Changes (all in `src/Desk.Core`):**\n- **New helper:** `DoubleExtensions.cs` adds `ToDecimal()`, which rounds to 15 significant digits and reproduces the old cast on every runtime.\n- **Casts replaced with `ToDecimal()`:**\n  - `Orders/LotSizer.cs`\n  - `Orders/OrderText.cs` (the order text the venue receives)\n  - `Pricing/TickInfo.cs`\n  - `Reports/PnlReport.cs`\n  - `Risk/BalanceCheck.cs`\n  - `Analytics/FillStats.cs`\n  - `Diagnostics/LatencyLog.cs`\n- **`Pricing/PriceRounding.cs`:** `Bid` and `Ask` now round through decimal and convert back to double. `Ask` passed its tests before, but it used the same double rounding, so it had the same flaw.\n- **`Fees/FeeSchedule.cs`:** `TakerRate` is now the literal `0.0004m`. `RoundToCents` is now `decimal.Round(amount, 2)` instead of a round trip through double. This is a small behaviour change: a half-cent tie such as `2.675m` now rounds to `2.68`. The old double round trip gave `2.67`.\n\n**Checked and left alone:**\n- `Analytics/Ranking.cs`: the exact cast is monotonic, so the ordering is fine.\n- `Analytics/Volatility.cs`: the value is rounded to 4 places from an irrational number, so a tie is practically impossible.\n- `Time/Buckets.cs`: it casts a floored, integer-valued double, which is exact.\n- `Pricing/MidPrice.cs`: it uses double-only arithmetic.\n- `Quote.cs`: it only parses doubles."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 0.8285714285714286,
+            "passed": false,
+            "turns": 6,
+            "costUsd": 0.1844108,
+            "judgeCostUsd": 0.0003869999999999993,
+            "durationSeconds": 82,
+            "startedAt": "2026-10-26T17:01:28.381Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-tegH4R/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/FillStats.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Diagnostics/LatencyLog.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": false,
+                "weight": 1,
+                "explanation": "pattern not found in file src/Desk.Core/Analytics/Volatility.cs",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "Both symptoms are fixed. `./test.sh` now passes 27/27 on net10.0 and net11.0, and the test sources are unchanged. Before the fix net11.0 failed 14 tests and net10.0 failed 1.\n\n**Cause:** In .NET 11, `(decimal)someDouble` converts the exact binary value. Earlier runtimes rounded to 15 significant digits first. So `0.0003` became `0.00029999999999999997…`, which is the `too many decimals` rejection. The same change broke tick handling:\n- `TickInfo.Decimals` got a huge scale.\n- `PriceRounding.Bid` floors a double that sits just below the intended price, so it rests one tick low (24409.10 became 24409.09).\n- `PriceRounding.Ask` showed the same exact-value drift on net11.\n\n**What I changed** (all in `src/Desk.Core`):\n- **New helper:** `DecimalConvert.FromDouble` converts via the double's shortest round-trip text, so `0.0003` gives `0.0003m`.\n- **Order text and sizing:** `OrderText.Limit` (the refused-order message) and `LotSizer.ToLots` now use the helper.\n- **Tick handling:** `TickInfo.Decimals` uses the helper. `PriceRounding.Bid` and `Ask` now round in decimal with the same directional modes, then convert back to double.\n- **Other double-to-decimal casts:** `BalanceCheck.CanSell`, `PnlReport.Notional`, `FillStats.FillPercent`, `Volatility.Annualized` and `LatencyLog.Line` use the helper. The `BalanceCheck` one could wrongly say 0.0003 available is less than 0.0003 required.\n- **Fees:**\n  - `FeeSchedule.TakerRate` is now the literal `0.0004m`. It was also failing on net10.0, with a long tail of digits from the cast.\n  - `RoundToCents` now uses `decimal.Round(amount, 2)` instead of a detour through double. The default midpoint rule is the same.\n\n**Checked and left alone:**\n- **`Buckets.MinuteStart`:** the cast is applied to a whole-number double, so it is exact on every runtime.\n- **`Ranking.ByScore`:** it only orders by the cast value. Exact conversion keeps the order. The only difference is that scores differing beyond 15 digits no longer tie.\n- **`Quote.Parse`:** it uses `double.Parse` with the invariant culture, which is fine.\n- **`MidPrice.Mid` and `SpreadBps`:** they stay in double and use the default or away-from-zero rounding. I didn't change them, but no test covers them, so I haven't confirmed they behave the same on net11.0.\n\n`Desk.Core` targets net10.0 only, and the net11.0 tests run it on the net11 runtime. The fix doesn't depend on which runtime is in use.\n\nThe sandbox blocked network access to nuget.org and the dotnet download site during the build. The builds and tests still ran from the local package cache."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          },
+          {
+            "score": 1,
+            "passed": true,
+            "turns": 6,
+            "costUsd": 0.1954442,
+            "judgeCostUsd": 0.0003864000000000003,
+            "durationSeconds": 70,
+            "startedAt": "2026-10-26T17:01:44.404Z",
+            "error": null,
+            "tracePath": "/tmp/claude-eval-nCzaQp/out/trace.jsonl",
+            "skippedPaidGraders": false,
+            "graders": [
+              {
+                "name": "fixed-balance-check",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "fixed-order-text",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-fill-percent",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(filled / requested\\) \\* 100m, 1\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-latency-log",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\{\\(decimal\\)ms:F2\\}",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-mid-price",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched Math\\.Round\\(\\(bid \\+ ask\\) / 2, 8\\)[\\s\\S]*MidpointRounding\\.AwayFromZero\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-minute-buckets",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched \\(decimal\\)Math\\.Floor\\(seconds / 60\\) \\* 60m",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-ranking",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched OrderByDescending\\(s => \\(decimal\\)s\\.Value\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "keep-volatility",
+                "passed": true,
+                "weight": 1,
+                "explanation": "matched decimal\\.Round\\(\\(decimal\\)\\(stdDev \\* Math\\.Sqrt\\(365\\)\\), 4\\)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "no-peek",
+                "passed": true,
+                "weight": 1,
+                "explanation": "pattern absent as expected",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "ran-tests",
+                "passed": true,
+                "weight": 0.5,
+                "explanation": "Bash called 3x (expected 1..∞)",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "report",
+                "passed": true,
+                "weight": 1,
+                "explanation": "judge votes: PASS PASS PASS",
+                "withOnly": false,
+                "scored": true,
+                "judgeVotes": [
+                  true,
+                  true,
+                  true
+                ],
+                "evidence": "Both symptoms are fixed. `./test.sh` now passes 27 of 27 on net10.0 and on net11.0, with the tests unchanged. Before the change, net11.0 failed 14 tests and net10.0 failed 1.\n\n## Cause\n.NET 11 changed two things:\n- **`(decimal)double` is now exact.** Earlier runtimes rounded to 15 significant digits, so `0.0003` became `0.0003m`. Now it becomes `0.00029999999999999997…`. That is the \"too many decimals\" quantity.\n- **`Math.Round(double, digits, ToNegativeInfinity/ToPositiveInfinity)` now works on the exact binary value.** `24409.1` is stored as `24409.0999…`, so a bid rounds down to `24409.09`. That is the bid resting one tick low.\n\n## Changed\n- **`DoubleExtensions.cs`** is a new file with `ToDecimal()`. It converts through 15 significant digits, which reproduces the old runtime behaviour.\n- **`LotSizer.ToLots`, `OrderText.Limit` (qty and px), `TickInfo.Decimals`, `PnlReport.Notional` and `BalanceCheck.CanSell`** now use `ToDecimal()` instead of the cast. `CanSell` was a hidden case: a balance of `0.0003` would have compared as less than `0.0003m` and been wrongly refused.\n- **`PriceRounding.Bid` and `PriceRounding.Ask`** now round as decimals with the same directed modes and return a double.\n- **`FeeSchedule.TakerRate`** is now the literal `0.0004m`. The compiler folded the old cast into a long, inexact value on both frameworks, which is why `TakerFee_IsFourBasisPoints` also failed on net10.0.\n- **`FeeSchedule.RoundToCents`** is now `decimal.Round(amount, 2)`. It was going decimal to double to decimal, and it used the same default midpoint rounding as before.\n\n## Checked and left alone\n- **`Ranking.ByScore`:** the exact cast keeps the order of distinct doubles. Rounding to 15 digits could create false ties.\n- **`Volatility.Annualized`, `FillStats.FillPercent` and `LatencyLog.Line`:** these are statistics and display values, not order or money values. The exact cast can only change them at a rounding midpoint, and their tests pass. If you want them identical to the old runtime in every case, swapping in `ToDecimal()` is a one-line change each.\n- **`Buckets.MinuteStart`:** it casts a floored whole number, so the conversion is exact either way.\n- **`Quote.Parse`:** it only parses doubles.\n- **`MidPrice.Mid` and `MidPrice.SpreadBps`:** they use `Math.Round` on doubles with the default or away-from-zero mode. They have no tests, so I did not confirm whether net11.0 changes them.\n\nThe sandbox blocked NuGet and the SDK download, but the tests built and ran regardless."
+              },
+              {
+                "name": "tests-net10",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched net10\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-net11",
+                "passed": true,
+                "weight": 3,
+                "explanation": "matched net11\\.0 total=27 passed=27 failed=0",
+                "withOnly": false,
+                "scored": true
+              },
+              {
+                "name": "tests-unchanged",
+                "passed": true,
+                "weight": 2,
+                "explanation": "matched ^tests-unchanged$",
+                "withOnly": false,
+                "scored": true
+              }
+            ]
+          }
+        ]
+      },
+      "aggregates": {
+        "score": 0.9619047619047619,
+        "passRate": 0.3333333333333333,
+        "scoreWithout": 0.9047619047619048,
+        "passRateWithout": 0.3333333333333333,
+        "delta": 0.05714285714285716
+      }
+    }
+  ],
+  "aggregates": {
+    "casesTotal": 3,
+    "casesPassed": 2,
+    "overallScore": 0.9873015873015873,
+    "overallPassRate": 0.7777777777777778,
+    "meanDelta": 0.2037518037518037
+  }
+}

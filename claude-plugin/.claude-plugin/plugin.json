@@ -1,0 +1,5 @@
+{
+  "name": "dotnet11-floating-point",
+  "version": "0.1.0",
+  "description": "Triage of the .NET 11 changes to double and float to decimal conversion and to Math.Round with digits: keep the plain cast where nothing depends on the last digits, fix only the sites .NET 11 actually breaks."
+}

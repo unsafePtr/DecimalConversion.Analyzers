@@ -54,3 +54,9 @@ A mode chosen at run time is reported as well.
 3. Delete the `<Compile Include="FloatingPoint.cs" />` line `dotnet format` adds with each helper; the SDK already compiles the file (NETSDK1022).
 4. Check that the build reports no DCV001, DCV002 or DCV003 other than `CreateSaturating` and `CreateTruncating`, the tests pass, and a search finds none of the unreported conversions above.
 5. Remove the package, or keep it to catch new conversions; as a development dependency it does not flow to projects that reference yours.
+
+## Skill
+
+[claude-plugin](claude-plugin) is a Claude Code plugin with the `dotnet11-floating-point` skill.
+Instead of converting every site, it has the agent decide per site whether .NET 11 changes anything that matters, keep the plain cast where it does not, and fix the rest.
+[claude-plugin-eval](claude-plugin-eval) measures it with `claude plugin eval` against an agent without it; see [the first results](claude-plugin-eval/results/2026-10-26-sonnet-5.5.md).
