@@ -112,6 +112,41 @@ public class FloatingToDecimalTests
         DefaultHelper);
 
     [Fact]
+    public Task CreateChecked_HelperCall() => Verify.VerifyAsync(
+        """
+        class C
+        {
+            decimal M(double size) => {|DCV001:decimal.CreateChecked(size)|};
+        }
+        """,
+        """
+        using DecimalConversion;
+
+        class C
+        {
+            decimal M(double size) => FloatingPoint.ToDecimal(size);
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task CreateSaturatingAndTruncating_ReportedWithoutFix() => Verify.VerifyAsync(
+        """
+        class C
+        {
+            decimal A(double size) => {|DCV001:decimal.CreateSaturating(size)|};
+            decimal B(float size) => {|DCV001:decimal.CreateTruncating(size)|};
+        }
+        """,
+        """
+        class C
+        {
+            decimal A(double size) => {|DCV001:decimal.CreateSaturating(size)|};
+            decimal B(float size) => {|DCV001:decimal.CreateTruncating(size)|};
+        }
+        """);
+
+    [Fact]
     public Task HelperAndUsingPresent_NothingAdded() => Verify.VerifyAsync(
         [
             """
@@ -307,6 +342,7 @@ public class FloatingToDecimalTests
             decimal D(string s) => Convert.ToDecimal(s);
             double E(decimal d) => (double)d;
             decimal F() => 0.5m;
+            decimal G(int n) => decimal.CreateChecked(n);
         }
         """);
 }

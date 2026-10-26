@@ -8,13 +8,20 @@ using Microsoft.CodeAnalysis.Operations;
 namespace DecimalConversion;
 
 /// <summary>
-/// Reports every conversion of a double or float to decimal that the runtime performs: an explicit cast, <c>Convert.ToDecimal</c> and the <c>decimal</c> constructor.
+/// Reports every conversion of a double or float to decimal that the runtime performs: an explicit cast, <c>Convert.ToDecimal</c>, the <c>decimal</c> constructor and <c>decimal.CreateChecked</c> with its saturating and truncating forms.
 /// A conversion of a constant is reported as DCV002, which the code fix turns into a decimal literal; the rest as DCV001, which it routes through the configured helper.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
 {
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = ImmutableArray.Create(Descriptors.RuntimeConversion, Descriptors.ConstantConversion);
+    /// <summary>
+    /// Marks a DCV001 the code fix leaves alone: <c>CreateSaturating</c> and <c>CreateTruncating</c> clamp a value outside decimal's range and turn NaN into zero, where the helper throws.
+    /// </summary>
+    internal const string ClampsProperty = "Clamps";
+
+    private static readonly ImmutableDictionary<string, string?> Clamps = ImmutableDictionary<string, string?>.Empty.Add(ClampsProperty, null);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Descriptors.RuntimeConversion, Descriptors.ConstantConversion];
 
     public override void Initialize(AnalysisContext context)
     {
@@ -60,15 +67,19 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
     {
         var invocation = (IInvocationOperation)context.Operation;
         var method = invocation.TargetMethod;
-        if (method.Name != "ToDecimal"
-            || method.ContainingType?.ToDisplayString() != "System.Convert"
-            || method.Parameters.Length != 1
-            || !IsFloating(method.Parameters[0].Type))
+        if (method.Parameters.Length != 1 || !IsFloating(method.Parameters[0].Type))
         {
             return;
         }
 
-        Report(context, invocation.Syntax, method.Parameters[0].Type.ToDisplayString());
+        var isConvert = method.Name == "ToDecimal" && method.ContainingType?.ToDisplayString() == "System.Convert";
+        var isCreate = method.ContainingType?.SpecialType == SpecialType.System_Decimal && method.Name is "CreateChecked" or "CreateSaturating" or "CreateTruncating";
+        if (!isConvert && !isCreate)
+        {
+            return;
+        }
+
+        Report(context, invocation.Syntax, method.Parameters[0].Type.ToDisplayString(), method.Name is "CreateSaturating" or "CreateTruncating" ? Clamps : null);
     }
 
     private static void AnalyzeObjectCreation(OperationAnalysisContext context)
@@ -84,7 +95,7 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
         Report(context, creation.Syntax, constructor.Parameters[0].Type.ToDisplayString());
     }
 
-    private static void Report(OperationAnalysisContext context, SyntaxNode node, string sourceType)
+    private static void Report(OperationAnalysisContext context, SyntaxNode node, string sourceType, ImmutableDictionary<string, string?>? properties = null)
     {
         var helper = HelperOption.Read(context.Options.AnalyzerConfigOptionsProvider, node.SyntaxTree);
         if (IsHelper(context.ContainingSymbol, helper))
@@ -92,7 +103,7 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        context.ReportDiagnostic(Diagnostic.Create(Descriptors.RuntimeConversion, node.GetLocation(), node.ToString(), sourceType, helper.Display));
+        context.ReportDiagnostic(Diagnostic.Create(Descriptors.RuntimeConversion, node.GetLocation(), properties, node.ToString(), sourceType, helper.Display));
     }
 
     // The helper is the one place a conversion belongs, so a project that writes its own may convert inside it.

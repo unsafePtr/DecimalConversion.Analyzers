@@ -1,39 +1,56 @@
 # DecimalConversion.Analyzers
 
-A Roslyn analyzer and code fix for the .NET 11 change to double and float to decimal conversion.
-Before .NET 11 a double became a decimal with 15 significant digits and a float with 7; .NET 11 keeps the exact binary value, so `(decimal)0.0002` is `0.0002000000000000000095843472`, and a compiler hosted by the .NET 11 SDK folds constant conversions the same way whatever the target framework.
-There is no compatibility switch: https://learn.microsoft.com/dotnet/core/compatibility/core-libraries/11/decimal-biginteger-floating-point-conversions.
+Roslyn analyzers and code fixes for two .NET 11 changes to double and float: conversion to decimal, and [rounding to digits](#rounding-to-digits).
+Before .NET 11 the conversion kept 15 significant digits of a double and 7 of a float.
+.NET 11 rounds the exact binary value instead, so `(decimal)0.0002` is `0.0002000000000000000095843472`.
+A compiler hosted by the .NET 11 SDK embeds that result for a constant conversion, whatever the target framework.
+There is no compatibility switch: [breaking change](https://learn.microsoft.com/dotnet/core/compatibility/core-libraries/11/decimal-biginteger-floating-point-conversions).
 
-## Rules
-
-| ID | Default | What it does |
+| Warning | Reports | Fix |
 |---|---|---|
-| DCV001 | Warning | An explicit cast, `Convert.ToDecimal` or `new decimal(...)` from a double or float is rewritten to a call of the configured helper |
-| DCV002 | Warning | A constant double or float cast to decimal is rewritten to the decimal literal with the old rounding |
+| DCV001 | A cast, `Convert.ToDecimal`, `new decimal(...)` or `decimal.CreateChecked` from a double or float | Calls the helper |
+| DCV002 | A double or float constant cast to decimal | Writes the decimal literal with the old rounding |
+| DCV003 | `Math.Round`, `MathF.Round`, `double.Round` or `float.Round` to some digits with a directed mode | Rounds the helper's decimal |
 
-The code fix adds the `using` for the helper's namespace once per file. Integer, long and decimal sources are not reported, since those conversions are exact on every runtime.
+DCV001 also reports `decimal.CreateSaturating` and `CreateTruncating`, without a fix: they clamp a value outside decimal's range and turn NaN into zero, where the helper throws.
+
+Not reported, though the same change affects them:
+
+- `IConvertible.ToDecimal`
+- `Convert.ToDecimal(object)` on a boxed double or float
 
 ## The helper
 
-The code fix calls `DecimalConversion.FloatingPoint.ToDecimal`, the recipe from the breaking-change page: format with `G15` for a double or `G7` for a float, and parse the text back.
-When the callers cannot see the helper, the fix adds it once, as a public `FloatingPoint.cs` in the closest project they all reference, such as a common library.
-Only a fix over the whole solution sees every caller, so run it on the solution; fixing one project at a time puts the helper in that project.
-Callers that share no project each get an internal copy, and a project reached through `InternalsVisibleTo` uses its reference's copy.
-A project that cannot compile the helper, such as netstandard2.0 without `double.TryFormat`, is not chosen as the shared one.
-The fixed code depends only on that file, so the package can be removed once the fixes are in.
+The fix calls `DecimalConversion.FloatingPoint.ToDecimal`, the recipe from the breaking-change page.
+It formats a double with `G15` or a float with `G7` and parses the text back.
+When the callers cannot see it, the fix adds a public `FloatingPoint.cs` to the closest project they all reference.
+Callers that share no such project each get an internal copy.
+netstandard2.0 lacks `double.TryFormat`, so a netstandard2.0 caller with no other project to host the helper gets a copy it cannot compile.
 
-To use another name, or a helper the code already has, name it in `.editorconfig` as a fully qualified method:
+To call another method, such as one the code already has, name it in `.editorconfig`:
 
 ```ini
 [*.cs]
 decimal_conversion_helper = MyCompany.Numerics.FloatingPoint.ToDecimal
 ```
 
-Conversions inside the helper are not reported, since it is where they belong.
+The method needs a `float` overload as well as a `double` one; otherwise a float is widened and `14.1f` becomes `14.1000003814697`.
+Conversions inside the method are not reported.
+
+## Rounding to digits
+
+.NET 11 also [changed](https://learn.microsoft.com/dotnet/core/compatibility/core-libraries/11/math-round-digits) `Math.Round(double, digits, mode)`: it rounds the exact binary value.
+A double holding 24409.10 is 24409.0999999999985448…, so rounding it down to 2 digits gives 24409.09.
+With `ToNegativeInfinity`, `ToPositiveInfinity` or `ToZero`, 40 to 50 percent of the prices already on a grid move by one tick, against up to 7 percent on .NET 10.
+DCV003 rewrites the call to `(double)decimal.Round(FloatingPoint.ToDecimal(price), digits, mode)`, which moves none on either runtime.
+That changes the .NET 10 result too, for the prices .NET 10 already moved.
+A mode chosen at run time is reported as well.
+`ToEven`, `AwayFromZero` and zero digits are not, since a value on the grid stays where it is.
 
 ## Use
 
-1. Reference the `DecimalConversion.Analyzer` package from the projects to fix, or pack it from `src/DecimalConversion.CodeFixes` with `dotnet pack -c Release`.
-2. Fix the conversions with `dotnet format analyzers --diagnostics DCV001 DCV002 --severity warn <solution>`, or with Fix All in Solution in the IDE.
-3. When `dotnet format` adds `FloatingPoint.cs` it also writes `<Compile Include="FloatingPoint.cs" />` into the project, which the SDK rejects as a duplicate of its default glob (NETSDK1022); delete that line.
-4. Remove the package, or keep it to catch new conversions; it is a development dependency, so it doesn't flow to the projects that reference yours.
+1. Reference the `DecimalConversion.Analyzer` package from every project to fix, or build it with `dotnet pack src/DecimalConversion.CodeFixes -c Release -o artifacts`.
+2. Fix the whole solution in one run, since fixing one project puts the helper there: `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003`.
+3. Delete the `<Compile Include="FloatingPoint.cs" />` line `dotnet format` adds with each helper; the SDK already compiles the file (NETSDK1022).
+4. Check that the build reports no DCV001, DCV002 or DCV003 other than `CreateSaturating` and `CreateTruncating`, the tests pass, and a search finds none of the unreported conversions above.
+5. Remove the package, or keep it to catch new conversions; as a development dependency it does not flow to projects that reference yours.
