@@ -1,9 +1,9 @@
 diff --git a/src/Desk.Common/FloatingPoint.cs b/src/Desk.Common/FloatingPoint.cs
 new file mode 100644
-index 0000000..b47530e
+index 0000000..eb96a50
 --- /dev/null
 +++ b/src/Desk.Common/FloatingPoint.cs
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,40 @@
 +using System.Globalization;
 +
 +namespace DecimalConversion;
@@ -13,6 +13,7 @@ index 0000000..b47530e
 +/// </summary>
 +/// <remarks>
 +/// This is the recipe from https://learn.microsoft.com/dotnet/core/compatibility/core-libraries/11/decimal-biginteger-floating-point-conversions.
++/// Span is written with its namespace, so the file compiles with or without the SDK's implicit usings.
 +/// </remarks>
 +public static class FloatingPoint
 +{
@@ -24,21 +25,21 @@ index 0000000..b47530e
 +    /// </remarks>
 +    public static decimal Normalize(decimal value)
 +    {
-+        Span<char> text = stackalloc char[40];
++        System.Span<char> text = stackalloc char[40];
 +        value.TryFormat(text, out var length, "G29", CultureInfo.InvariantCulture);
 +        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
 +    }
 +
 +    public static decimal ToDecimal(double value)
 +    {
-+        Span<char> text = stackalloc char[32];
++        System.Span<char> text = stackalloc char[32];
 +        value.TryFormat(text, out var length, "G15", CultureInfo.InvariantCulture);
 +        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
 +    }
 +
 +    public static decimal ToDecimal(float value)
 +    {
-+        Span<char> text = stackalloc char[32];
++        System.Span<char> text = stackalloc char[32];
 +        value.TryFormat(text, out var length, "G7", CultureInfo.InvariantCulture);
 +        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
 +    }
@@ -167,7 +168,7 @@ index 910f6a8..9418593 100644
 +        FormattableString.Invariant($"{(buy ? "BUY" : "SELL")} {symbol} qty={FloatingPoint.ToDecimal(qty)} px={FloatingPoint.ToDecimal(price)}");
  }
 diff --git a/src/Desk.Core/Pricing/MidPrice.cs b/src/Desk.Core/Pricing/MidPrice.cs
-index 68ec5f9..8d5a520 100644
+index ec35b11..d303dea 100644
 --- a/src/Desk.Core/Pricing/MidPrice.cs
 +++ b/src/Desk.Core/Pricing/MidPrice.cs
 @@ -1,8 +1,10 @@
@@ -177,11 +178,11 @@ index 68ec5f9..8d5a520 100644
  
  public static class MidPrice
  {
--    public static double Mid(double bid, double ask) => Math.Round((bid + ask) / 2, 8);
-+    public static double Mid(double bid, double ask) => (double)decimal.Round(FloatingPoint.ToDecimal((bid + ask) / 2), 8);
+-    public static double Mid(double bid, double ask, double bidSize, double askSize) => Math.Round((bid * askSize + ask * bidSize) / (bidSize + askSize), 8);
++    public static double Mid(double bid, double ask, double bidSize, double askSize) => (double)decimal.Round(FloatingPoint.ToDecimal((bid * askSize + ask * bidSize) / (bidSize + askSize)), 8);
  
--    public static double SpreadBps(double bid, double ask) => Math.Round((ask - bid) / Mid(bid, ask) * 10_000, 2, MidpointRounding.AwayFromZero);
-+    public static double SpreadBps(double bid, double ask) => (double)decimal.Round(FloatingPoint.ToDecimal((ask - bid) / Mid(bid, ask) * 10_000), 2, MidpointRounding.AwayFromZero);
+-    public static double SpreadBps(double bid, double ask) => Math.Round((ask - bid) / ((bid + ask) / 2) * 10_000, 2, MidpointRounding.AwayFromZero);
++    public static double SpreadBps(double bid, double ask) => (double)decimal.Round(FloatingPoint.ToDecimal((ask - bid) / ((bid + ask) / 2) * 10_000), 2, MidpointRounding.AwayFromZero);
  }
 diff --git a/src/Desk.Core/Pricing/PriceRounding.cs b/src/Desk.Core/Pricing/PriceRounding.cs
 index 43aad91..6d2804a 100644

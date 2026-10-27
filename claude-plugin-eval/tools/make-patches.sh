@@ -28,13 +28,15 @@ make() {
     git add -A
 
     mkdir -p .dcv/backup
-    cp --parents .editorconfig Directory.Build.props src/Desk.Common/Desk.Common.csproj .dcv/backup/
+    cp --parents .editorconfig Directory.Build.props .dcv/backup/
     sed -i "s#^</Project>#  <ItemGroup>\n    <PackageReference Include=\"DecimalConversion.Analyzer\" Version=\"$version\" PrivateAssets=\"all\" />\n  </ItemGroup>\n</Project>#" Directory.Build.props
-    printf '\n# DecimalConversion migration\n[*.cs]\ndecimal_conversion_helper_project = Desk.Common\n' >> .editorconfig
+    dotnet restore Desk.slnx -v:q > /dev/null
+    cp ".packages/decimalconversion.analyzer/$version/helper/FloatingPoint.cs" src/Desk.Common/
+    printf '\n# DecimalConversion migration\n' >> .editorconfig
     for site in "$@"; do
         printf '\n[src/Desk.Core/%s]\ndotnet_diagnostic.%s.severity = none\n' "${site%%:*}" "${site##*:}" >> .editorconfig
     done
-    dotnet format analyzers Desk.slnx --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 --severity warn --report .dcv
+    dotnet format analyzers Desk.slnx --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 --severity warn --no-restore --report .dcv
     cp -r .dcv/backup/. .
     rm -r .dcv
 

@@ -16,4 +16,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\src\DecimalConversion.CodeFixes\Helper\FloatingPoint.cs" Link="Helper\FloatingPoint.cs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

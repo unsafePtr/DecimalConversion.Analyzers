@@ -28,6 +28,8 @@ It formats a double with `G15` or a float with `G7` and parses the text back.
 When the callers cannot see it, the fix adds a public `FloatingPoint.cs` to the closest project they all reference, with the encoding and line endings of the files already there.
 Callers that share no such project each get an internal copy.
 netstandard2.0 lacks `double.TryFormat`, so a netstandard2.0 caller with no other project to host the helper gets a copy it cannot compile.
+The package also ships the default helper as a plain file, `helper/FloatingPoint.cs`, which compiles with or without implicit usings.
+Copied into a project before the fix runs, it is called rather than written, so the fix adds no file and changes no project file.
 
 To put the helper in another project that every caller references, such as a shared one lower down, name the project in `.editorconfig`; a project some caller does not reference is passed over for the closest shared one.
 To call another method, such as one the code already has, name it as well:
@@ -81,11 +83,13 @@ The package is meant to be installed for the migration and removed after it, lea
 
 1. Copy `.editorconfig` and `Directory.Build.props` aside, and reference the `DecimalConversion.Analyzer` package from `Directory.Build.props` with `PrivateAssets="all"`, or build it with `dotnet pack src/DecimalConversion.CodeFixes -c Release -o artifacts`.
 2. Run `dotnet build --no-incremental`: every DCV warning is a site, found by the compiler rather than by a text search.
-3. Choose the project for the helper, copy its project file aside, and name it with `decimal_conversion_helper_project` in `.editorconfig`.
+3. Choose the project for the helper and copy the package's `helper/FloatingPoint.cs` into it, from the NuGet packages folder that `dotnet nuget locals global-packages --list` names.
 4. Decide per site, since many need no change; the skill in [claude-plugin](claude-plugin) is that triage. Turn off the rule for each file whose sites you keep, with `dotnet_diagnostic.DCV001.severity = none` in a section for that file.
 5. Run `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 --severity warn --report <folder>` once over the whole solution, so it sees every caller of the helper. `analyzers` runs no whitespace or style formatting, `--diagnostics` keeps the fixes of other analyzers out, and the report lists each site it fixed.
 6. Build again, where no DCV warning may be left, and run the tests on net10.0 and net11.0 while the `.editorconfig` entries are still in place. A kept site that needs the fix after all loses its entry, and `dotnet format` runs again.
-7. Put the copies back, which removes the package, the `.editorconfig` entries and the `<Compile Include="FloatingPoint.cs" />` item that `dotnet format` writes into the helper's project file, re-saving that file with line endings of its own. The helper stays. Build and test once more, and check that a search finds none of the unreported conversions above.
+7. Put the copies back, which removes the package and the `.editorconfig` entries; the helper stays. Build and test once more, and check that a search finds none of the unreported conversions above.
+
+Without the copied helper, the fix writes one, and `dotnet format` then saves that project file with a `<Compile Include="FloatingPoint.cs" />` item, a byte order mark and the platform's line endings, which only a copy of the file can undo.
 
 To keep the package in the build to check new code instead, suppress each kept site with `#pragma warning disable` and its reason; as a development dependency it does not flow to projects that reference yours.
 

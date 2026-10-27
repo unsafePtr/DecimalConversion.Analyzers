@@ -314,14 +314,14 @@ internal static class Formatter
     }
 
     // MSBuildWorkspace adds a Compile item for each new file, though the SDK's glob already includes it.
-    // It saves the project file with CRLF line ends, a byte order mark and no final line break.
+    // MSBuild saves the project file with the platform's line ends, a byte order mark and no final line break.
     private static void AddCompileItems(string projectFile, List<string> files)
     {
         var text = File.ReadAllText(projectFile).Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
         var end = text.LastIndexOf("</Project>", StringComparison.Ordinal);
         var items = string.Concat(files.Select(f => $"    <Compile Include=\"{Path.GetRelativePath(Path.GetDirectoryName(projectFile)!, f)}\" />\n"));
         text = text[..end] + "  <ItemGroup>\n" + items + "  </ItemGroup>\n" + text[end..];
-        File.WriteAllText(projectFile, text.Replace("\n", "\r\n", StringComparison.Ordinal), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        File.WriteAllText(projectFile, text.Replace("\n", Environment.NewLine, StringComparison.Ordinal), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
 
     // As in dotnet format, a path with the .json extension names the report itself.

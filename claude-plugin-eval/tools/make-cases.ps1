@@ -21,7 +21,7 @@ $keep = [ordered]@{
     'keep-latency-log'    = @('src/Desk.Core/Diagnostics/LatencyLog.cs', '\{\(decimal\)ms:F2\}')
     'keep-ranking'        = @('src/Desk.Core/Analytics/Ranking.cs', 'OrderByDescending\(s => \(decimal\)s\.Value\)')
     'keep-minute-buckets' = @('src/Desk.Core/Time/Buckets.cs', '\(decimal\)Math\.Floor\(seconds / 60\) \* 60m')
-    'keep-mid-price'      = @('src/Desk.Core/Pricing/MidPrice.cs', 'Math\.Round\(\(bid \+ ask\) / 2, 8\)[\s\S]*MidpointRounding\.AwayFromZero\)')
+    'keep-mid-price'      = @('src/Desk.Core/Pricing/MidPrice.cs', 'Math\.Round\(\(bid \* askSize \+ ask \* bidSize\) / \(bidSize \+ askSize\), 8\)[\s\S]*MidpointRounding\.AwayFromZero\)')
 }
 
 function Tool-Grader([string] $weight, [string] $tool, [string] $inputMatch, [int] $min, [int] $max = -1) {
@@ -40,6 +40,13 @@ function Tool-Grader([string] $weight, [string] $tool, [string] $inputMatch, [in
 # Nor is a grep of a project file, or the skill's one search for the conversions the analyzer cannot see.
 $sourceGrep = '(^|["\s;|&(]|\\n)(grep|egrep|fgrep|rg|ack|ag)\b(?!(?:(?!\s\|\s|;|&&|\\n).)*(\.log\b|\.(csproj|props|targets|slnx?)\b|ToDecimal|IConvertible|Value<decimal>))(?:(?!\s\|\s|;|&&|\\n).)*?(\s-[A-Za-z]*[rR]|--recursive|\s\.?/?(src|tests?)\b|\.cs\b|\s\.(\s|$|"|\\n))|xargs\s+(-\S+\s+)*(grep|rg)\b'
 
+# A Bash call that prints a whole C# file: cat of a .cs file, cat in a loop over .cs files, or cat fed by xargs.
+# Printing the lines around a warning with sed -n is the skill's way, and cat > file writes rather than reads.
+$sourceCat = '(^|["\s;|&(]|\\n)(cat|bat|less|more|nl)\s(?!\s*>)(?:(?!\s\|\s|;|&&|\\n).)*?\.cs\b|\.cs\b(?:(?!\\n).)*?;\s*do\b(?:(?!\\n).)*?(^|["\s;|&(])(cat|bat)\s|xargs\s+(-\S+\s+)*cat\b'
+
+# The Read tool on a whole C# file; a read with a limit takes only some of its lines.
+$sourceRead = '^(?![\s\S]*"limit")[\s\S]*\.cs"'
+
 function Common-Graders([string] $case, [int] $total, [bool] $agentGraders) {
     $g = Join-Path $evals "$case/graders"
     Write-Lf "$g/tests-net10.md" (Regex-Grader 2 'TestResults/summary.txt' "net10\.0 total=$total passed=$total failed=0")
@@ -53,6 +60,8 @@ function Common-Graders([string] $case, [int] $total, [bool] $agentGraders) {
         Write-Lf "$g/no-peek.md" "---`ntype: regex`nweight: 1`ntarget: trace`npattern: 'claude-plugin-eval|fixture-patches|golden\.patch|blanket\.patch|/graders/'`nmatch: not_contains`n---`n"
         Write-Lf "$g/no-grep-tool.md" (Tool-Grader 0.5 'Grep' '' 0 0)
         Write-Lf "$g/no-source-grep.md" (Tool-Grader 0.5 'Bash' $sourceGrep 0 0)
+        Write-Lf "$g/no-source-cat.md" (Tool-Grader 0.5 'Bash' $sourceCat 0 0)
+        Write-Lf "$g/no-source-read.md" (Tool-Grader 0.5 'Read' $sourceRead 0 0)
     }
 }
 

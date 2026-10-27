@@ -20,6 +20,13 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DecimalConversion.Tests" />
   </ItemGroup>
+  <!-- The default helper as a plain file, outside every folder NuGet compiles into a consumer. -->
+  <!-- A migration copies it into the chosen project before dotnet format runs. -->
+  <!-- No fix then adds a file, so dotnet format rewrites no project file. -->
+  <ItemGroup>
+    <Compile Remove="Helper/**" />
+    <None Include="Helper/FloatingPoint.cs" Pack="true" PackagePath="helper" />
+  </ItemGroup>
   <ItemGroup>
     <None Include="$(OutputPath)\DecimalConversion.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="$(OutputPath)\DecimalConversion.CodeFixes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
