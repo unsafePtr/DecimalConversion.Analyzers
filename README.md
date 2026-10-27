@@ -21,7 +21,7 @@ Only the fixes and one helper file stay.
 The plugin carries the package, so no NuGet feed is needed.
 
 Update with `claude plugin marketplace update decimal-conversion` and `claude plugin update dotnet11-floating-point@decimal-conversion`.
-[claude-plugin-eval](claude-plugin-eval) measures the skill against an agent without it: [latest results](claude-plugin-eval/results/2026-10-27-dotnet-format-sonnet-5.5.md).
+[claude-plugin-eval](claude-plugin-eval) measures the skill against an agent without it: [latest results](claude-plugin-eval/results/2026-10-28-sonnet-5.5.md).
 
 ## Migrate by hand
 

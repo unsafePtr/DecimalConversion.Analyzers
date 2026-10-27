@@ -14,11 +14,13 @@ The suite is kept apart from the plugin so that an agent using the skill cannot 
 | Sonnet 5.5, 2026-10-26 | 1.00 vs 0.81 | | 1.00 vs 0.64 | 0.96 vs 0.91 | [analysis](results/2026-10-26-sonnet-5.5.md) |
 | Sonnet 5.5, 2026-10-27 | 1.00 vs 0.71 | 1.00 vs 0.98 | 1.00 vs 0.52 | 1.00 vs 0.87 | [analysis](results/2026-10-27-sonnet-5.5.md) |
 | Sonnet 5.5, 2026-10-27, `dotnet format` path | 1.00 vs 0.73 | 0.98 vs 0.89 | 0.96 vs 0.70 | 0.99 vs 0.87 | [analysis](results/2026-10-27-dotnet-format-sonnet-5.5.md) |
+| Sonnet 5.5, 2026-10-28, package 1.3.2 and the hourly-interest site | 0.99 vs 0.72 | 0.99 vs 0.90 | 0.98 vs 0.67 | 0.98 vs 0.91 | [analysis](results/2026-10-28-sonnet-5.5.md) |
 
 Scores are with the skill against without it; the second run's leave out a grader that was removed after it, as its analysis explains.
 Both arms fixed every site .NET 11 breaks, and both converted every site when `migrate-full` asked for it.
-Without the skill the agent also rewrote harmless casts when asked to change only what needs to change, in 8 of 9 runs of the first run, 7 of 9 of the second and 7 of 9 of the third.
-In the third, the skill arm applied every fix with `dotnet format`, kept every harmless cast and put the build files back byte for byte, and the baseline never used the analyzer.
+Without the skill the agent also rewrote harmless casts when asked to change only what needs to change, in 8 of 9 runs of the first run, and 7 of 9 of each run since.
+In the third and the fourth, the skill arm applied every fix with `dotnet format`, kept every harmless cast and put the build files back byte for byte, and the baseline never used the analyzer.
+The fourth adds a constant whose .NET 10 value the `G15` recipe misses: the skill arm got it from the fix, and two baseline runs only by porting .NET 10's conversion.
 The first run predates the analyzer in the fixture's build and the invoice site, with 27 tests per framework; the third starts without the analyzer, which the agent installs and removes, and has graders for that path.
 
 ## The fixture
@@ -35,6 +37,7 @@ The call sites fall into two groups, with the warning the analyzer reports for e
 | balance compared with a decimal requirement | `Risk/BalanceCheck.cs` | DCV001 | changed | no |
 | bid and ask rounded down and up to the tick | `Pricing/PriceRounding.cs` | DCV003 | changed | yes |
 | fee rate written as a constant cast | `Fees/FeeSchedule.cs` | DCV002 | changed | yes |
+| hourly interest at a constant fraction of a year, `1.0 / 8760` | `Funding/BorrowInterest.cs` | DCV002 | changed | yes |
 | cents rounded through a double | `Fees/FeeSchedule.cs` | DCV005 | changed | yes |
 | decimal places of a tick size | `Pricing/TickInfo.cs` | DCV001 | changed | yes |
 | notional of two parsed doubles rounded to cents | `Reports/PnlReport.cs` | DCV001 | changed | yes |
@@ -46,11 +49,12 @@ The call sites fall into two groups, with the warning the analyzer reports for e
 | whole minutes from `Math.Floor` | `Time/Buckets.cs` | DCV001 | kept | no |
 | size-weighted mid price and spread in basis points, with nearest rounding | `Pricing/MidPrice.cs` | DCV004 | kept | no |
 
-With the analyzer installed the build reports 18 warnings; before any fix, 1 of the 30 tests fails on net10.0 (the constant cast, which the SDK 11 compiler folds the new way), and 16 fail on net11.0, among them 655.925 and 2.675 rounded to cents.
+With the analyzer installed the build reports 19 warnings; before any fix, 2 of the 31 tests fail on net10.0 (the two constant casts, which the SDK 11 compiler folds the new way), and 17 fail on net11.0, among them 655.925 and 2.675 rounded to cents.
+The hourly fraction has 17 significant digits, and .NET 10 gave `0.000114155251141552` where `ToString("G15")` gives `…553`, so its test passes only with the literal .NET 10 folded.
 `fixture-patches/golden.patch` is the reference fix, which `tools/make-patches.sh` writes by following the skill's path with the real `dotnet format`: the package's helper copied into `Desk.Common`, the six kept files turned off in `.editorconfig`, `dotnet format analyzers --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005` over the solution, and the copied build files put back.
-It changes the nine sites in eight files and adds `src/Desk.Common/FloatingPoint.cs`, and nothing else.
-`fixture-patches/blanket.patch` is the same path with no site kept, so the fix converts all fifteen.
-Both pass all 30 tests on both frameworks, so only the graders on the sites themselves tell them apart: the blanket patch fails exactly the six keep graders.
+It changes the ten sites in nine files and adds `src/Desk.Common/FloatingPoint.cs`, and nothing else.
+`fixture-patches/blanket.patch` is the same path with no site kept, so the fix converts all sixteen.
+Both pass all 31 tests on both frameworks, so only the graders on the sites themselves tell them apart: the blanket patch fails exactly the six keep graders.
 
 ## Cases
 

@@ -124,6 +124,19 @@ index 8593cb2..352fc94 100644
 -    public static decimal RoundToCents(decimal amount) => (decimal)Math.Round((double)amount, 2);
 +    public static decimal RoundToCents(decimal amount) => FloatingPoint.Normalize(Math.Round(amount, 2));
  }
+diff --git a/src/Desk.Core/Funding/BorrowInterest.cs b/src/Desk.Core/Funding/BorrowInterest.cs
+index d4ebed0..4d42802 100644
+--- a/src/Desk.Core/Funding/BorrowInterest.cs
++++ b/src/Desk.Core/Funding/BorrowInterest.cs
+@@ -2,7 +2,7 @@ namespace Desk.Funding;
+ 
+ public static class BorrowInterest
+ {
+-    public static readonly decimal HourFraction = (decimal)(1.0 / 8760);
++    public static readonly decimal HourFraction = 0.000114155251141552m;
+ 
+     public static decimal ForHours(decimal balance, decimal annualRate, int hours) => balance * annualRate * hours * HourFraction;
+ }
 diff --git a/src/Desk.Core/Invoices/LineTotal.cs b/src/Desk.Core/Invoices/LineTotal.cs
 index 6b1d7bf..def97da 100644
 --- a/src/Desk.Core/Invoices/LineTotal.cs

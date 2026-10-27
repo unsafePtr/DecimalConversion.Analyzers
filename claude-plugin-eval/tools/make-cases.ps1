@@ -108,19 +108,19 @@ $migrateFull = "This solution is moving to .NET 11.`nIts test project already ta
 $symptom = "We moved our order service to .NET 11 and two things broke.`nThe venue now refuses some orders with ``qty=0.0002999999999999999737189393: too many decimals``, and some passive bids rest one tick below the price we meant.`nThe solution is in this folder, and its tests target net10.0 and net11.0.`nFind the cause and fix it everywhere it applies, without touching code that is fine.`n$helper`n$tooling`nFinish with what you changed, and what you checked and left alone."
 
 Case 'migrate' 'Open-ended .NET 11 migration of a solution with sensitive and harmless conversions' 'core' 3 $migrate
-Common-Graders 'migrate' 30 $true
+Common-Graders 'migrate' 31 $true
 Fix-Graders 'migrate' $true
 Keep-Graders 'migrate' $true
 Write-Lf "$evals/migrate/graders/report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it lists the double-to-decimal conversions and roundings it changed, with how, and separately names the ones it left unchanged, with a reason for each.`nFAIL if it does not mention any unchanged conversion, or gives no reason for leaving them.`n"
 
 Case 'migrate-full' 'The .NET 11 migration on the same solution, asked to convert every site' 'core' 3 $migrateFull
-Common-Graders 'migrate-full' 30 $true
+Common-Graders 'migrate-full' 31 $true
 Fix-Graders 'migrate-full' $true
 Full-Graders 'migrate-full'
 Write-Lf "$evals/migrate-full/graders/report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it lists the double-to-decimal conversions and roundings it changed, with how, and does not report leaving any of them unchanged or suppressing a warning.`nFAIL if it reports leaving a reported site unchanged or suppressing a warning, or gives no list of the changes.`n"
 
 Case 'symptom' 'Bug report from a .NET 11 rollout: refused quantities and bids a tick low' 'core' 3 $symptom
-Common-Graders 'symptom' 30 $true
+Common-Graders 'symptom' 31 $true
 Fix-Graders 'symptom' $true
 Keep-Graders 'symptom' $true
 Write-Lf "$evals/symptom/graders/report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it explains the cause of both symptoms, says what was changed and how, and names conversions it checked and left unchanged, with a reason for each.`nFAIL if it does not mention looking beyond the two symptoms, or names no conversion it left unchanged.`n"
@@ -134,15 +134,15 @@ Write-Lf "$evals/no-op/graders/report.md" "---`ntype: llm`nweight: 1`n---`n`nJud
 # The scaffold applies the patch, so the agent only runs the tests and the graders see the patched solution.
 $calibration = "Run ``./test.sh`` and reply with the content of TestResults/summary.txt.`nDo not change any file."
 Case 'calibration-golden' 'The reference fix, applied by the scaffold, to check the graders score it fully' 'calibration' 1 $calibration
-Common-Graders 'calibration-golden' 30 $false
+Common-Graders 'calibration-golden' 31 $false
 Fix-Graders 'calibration-golden' $false
 Keep-Graders 'calibration-golden' $true
 Case 'calibration-blanket' 'The helper-everywhere fix, applied by the scaffold, to check the keep graders catch it' 'calibration' 1 $calibration
-Common-Graders 'calibration-blanket' 30 $false
+Common-Graders 'calibration-blanket' 31 $false
 Fix-Graders 'calibration-blanket' $false
 Keep-Graders 'calibration-blanket' $true
 Case 'calibration-full' 'The helper-everywhere fix under the migrate-full graders, to check they score it fully' 'calibration' 1 $calibration
-Common-Graders 'calibration-full' 30 $false
+Common-Graders 'calibration-full' 31 $false
 Fix-Graders 'calibration-full' $false
 Full-Graders 'calibration-full'
 
