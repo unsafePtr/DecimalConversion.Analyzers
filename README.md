@@ -20,17 +20,17 @@ The skill adds the analyzer for the migration, keeps the sites where .NET 11 cha
 Only the fixes and one helper file stay.
 The plugin carries the package, so no NuGet feed is needed.
 
-The repository is private: Claude Code clones it with your git credentials, for example after `gh auth setup-git`.
 Update with `claude plugin marketplace update decimal-conversion` and `claude plugin update dotnet11-floating-point@decimal-conversion`.
 [claude-plugin-eval](claude-plugin-eval) measures the skill against an agent without it: [latest results](claude-plugin-eval/results/2026-10-27-dotnet-format-sonnet-5.5.md).
 
 ## Migrate by hand
 
+The package is not on nuget.org: it ships in this repository, so clone it first.
 Copy `.editorconfig` and `Directory.Build.props` aside, then add the package to `Directory.Build.props`:
 
 ```xml
 <PropertyGroup>
-  <RestoreAdditionalProjectSources>path/to/claude-plugin/skills/dotnet11-floating-point/packages</RestoreAdditionalProjectSources>
+  <RestoreAdditionalProjectSources>path/to/DecimalConversion.Analyzers/claude-plugin/skills/dotnet11-floating-point/packages</RestoreAdditionalProjectSources>
 </PropertyGroup>
 <ItemGroup>
   <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.1" PrivateAssets="all" />
