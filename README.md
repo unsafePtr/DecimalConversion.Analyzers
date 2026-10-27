@@ -33,7 +33,7 @@ Copy `.editorconfig` and `Directory.Build.props` aside, then add the package to 
   <RestoreAdditionalProjectSources>path/to/claude-plugin/skills/dotnet11-floating-point/packages</RestoreAdditionalProjectSources>
 </PropertyGroup>
 <ItemGroup>
-  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.0" PrivateAssets="all" />
+  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.1" PrivateAssets="all" />
 </ItemGroup>
 ```
 
@@ -56,6 +56,7 @@ To keep the analyzer in the build instead, suppress each kept site with `#pragma
 | DCV004 | The same with a nearest mode, `ToEven`, `AwayFromZero` or none | The same |
 | DCV005 | A decimal sent through a double and back, such as `(decimal)Math.Round((double)amount, 2)` | `FloatingPoint.Normalize(Math.Round(amount, 2))`, which keeps 1.20 printing as 1.2, or `Math.Round(amount, 2)` |
 
+- DCV002's literal is the value .NET 10 folded, from a port of its conversion: `(decimal)Math.E` becomes `2.71828182845904m`.
 - `decimal.CreateSaturating` and `CreateTruncating` are reported without a fix, since they clamp where the helper throws.
 - `IConvertible.ToDecimal` and `Convert.ToDecimal(object)` on a boxed double or float are not reported.
 - The decimal route throws on NaN, infinity and values beyond decimal's range, where `Math.Round` returns them, so keep `Math.Round` for a computed value.
@@ -64,6 +65,9 @@ To keep the analyzer in the build instead, suppress each kept site with `#pragma
 ## The helper
 
 `FloatingPoint.ToDecimal` formats a double with `G15` or a float with `G7` and parses the text back, as the breaking-change page recommends.
+That matches .NET 10 for a double written with up to 15 significant digits, and matched it on all of 5 million floats tested.
+A computed double with 16 or 17 significant digits can end one unit away in the 15th digit.
+For such a value .NET 10 rounded twice, once when it scaled the value in double arithmetic and once to 15 digits.
 When no caller can see it, the fix adds it to the closest project they all reference, or to the one `.editorconfig` names.
 To call a method of your own instead, name it too:
 

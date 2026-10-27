@@ -216,6 +216,7 @@ public class FloatingToDecimalTests
         {
             decimal Clip => {|DCV002:(decimal)0.0002|};
             decimal Third => {|DCV002:(decimal)(1.0 / 3)|};
+            decimal E => {|DCV002:(decimal)System.Math.E|};
         }
         """,
         """
@@ -223,6 +224,7 @@ public class FloatingToDecimalTests
         {
             decimal Clip => 0.0002m;
             decimal Third => 0.333333333333333m;
+            decimal E => 2.71828182845904m;
         }
         """);
 

@@ -4,7 +4,7 @@
     <RootNamespace>DecimalConversion</RootNamespace>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <PackageId>DecimalConversion.Analyzer</PackageId>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
     <Description>Roslyn analyzers and code fixes for two .NET 11 changes: double and float to decimal conversion goes through a helper that keeps the pre-.NET 11 rounding, and rounding a double to decimal digits rounds that helper's decimal.</Description>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>

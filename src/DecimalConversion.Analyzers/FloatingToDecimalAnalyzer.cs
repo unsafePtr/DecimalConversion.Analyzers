@@ -37,7 +37,7 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
     /// <summary>The decimal literal a constant double or float becomes: the old conversion's 15 or 7 significant digits.</summary>
     internal static string Literal(object constant) => constant switch
     {
-        double d => d.ToString("G15", CultureInfo.InvariantCulture) + "m",
+        double d => Net10Conversion.Text(d) + "m",
         float f => f.ToString("G7", CultureInfo.InvariantCulture) + "m",
         _ => constant.ToString() + "m",
     };
