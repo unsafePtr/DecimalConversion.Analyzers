@@ -44,8 +44,9 @@ Under central package management, where `Directory.Packages.props` sets `ManageP
 Build the whole solution once, keep only the analyzer's lines, and print the lines around each:
 
 ```bash
-dotnet build <solution> --no-incremental -v:q 2>&1 | grep -o '[^ ]*([0-9]*,[0-9]*): warning DCV[0-9]*: [^[]*' \
-  | sed -E "s#^$PWD/##; s/(: warning DCV[0-9]+: '[^']*').*/\1/" | sort -u > .dcv/sites.txt
+root="$(pwd -W 2>/dev/null || pwd)"
+dotnet build <solution> --no-incremental -v:q 2>&1 | tr '\\' / | grep -oE '[^ ].*\([0-9]+,[0-9]+\): warning DCV[0-9]+: [^[]*' \
+  | sed -E "s#^$root/##; s/(: warning DCV[0-9]+: '[^']*').*/\1/" | sort -u > .dcv/sites.txt
 while IFS= read -r site; do
   file="${site%%(*}"; line="${site#*(}"; line="${line%%,*}"
   echo "== $site"; sed -n "$(( line > 2 ? line - 2 : 1 )),$(( line + 2 ))p" "$file"
