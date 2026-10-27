@@ -33,7 +33,7 @@ Copy `.editorconfig` and `Directory.Build.props` aside, then add the package to 
   <RestoreAdditionalProjectSources>path/to/DecimalConversion.Analyzers/claude-plugin/skills/dotnet11-floating-point/packages</RestoreAdditionalProjectSources>
 </PropertyGroup>
 <ItemGroup>
-  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.1" PrivateAssets="all" />
+  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.2" PrivateAssets="all" />
 </ItemGroup>
 ```
 

@@ -1,8 +1,9 @@
 {
   "name": "dotnet11-floating-point",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Migration of the .NET 11 changes to double and float to decimal conversion and to Math.Round with digits: install the DecimalConversion analyzer, list the sites from dotnet build, keep the plain cast where nothing depends on the last digits, apply the analyzer's fix to the rest with dotnet format, or to every site when asked to keep .NET 10's results everywhere, and remove the analyzer again.",
   "author": {
     "name": "unsafePtr"
-  }
+  },
+  "license": "MIT"
 }

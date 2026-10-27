@@ -33,11 +33,11 @@ Add the package to `Directory.Build.props`, restored from the copy this skill ca
   <RestoreAdditionalProjectSources>${CLAUDE_SKILL_DIR}/packages</RestoreAdditionalProjectSources>
 </PropertyGroup>
 <ItemGroup>
-  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.1" PrivateAssets="all" />
+  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.2" PrivateAssets="all" />
 </ItemGroup>
 ```
 
-Under central package management, where `Directory.Packages.props` sets `ManagePackageVersionsCentrally`, write `VersionOverride="1.3.1"` instead of `Version`.
+Under central package management, where `Directory.Packages.props` sets `ManagePackageVersionsCentrally`, write `VersionOverride="1.3.2"` instead of `Version`.
 
 ## 2. List the sites
 
@@ -80,7 +80,7 @@ Copy the helper into that project before `dotnet format` runs:
 
 ```bash
 packages="$(dotnet nuget locals global-packages --list)"
-cp "${packages#global-packages: }/decimalconversion.analyzer/1.3.1/helper/FloatingPoint.cs" src/Shared/
+cp "${packages#global-packages: }/decimalconversion.analyzer/1.3.2/helper/FloatingPoint.cs" src/Shared/
 ```
 
 With the helper in place, the fix only calls it and no project file changes.
