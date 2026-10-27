@@ -1,5 +1,6 @@
 <Project>
-  <ItemGroup>
-    <PackageReference Include="DecimalConversion.Analyzer" Version="1.2.0" PrivateAssets="all" />
-  </ItemGroup>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
 </Project>

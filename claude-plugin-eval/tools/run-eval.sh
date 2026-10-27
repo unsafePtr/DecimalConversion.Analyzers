@@ -4,6 +4,12 @@
 # The target is the repository root: plugin eval loads only plugins under its target, and the suite sits beside the plugin rather than inside it so a run cannot browse from the skill into the graders.
 set -euo pipefail
 suite="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+        echo "claude plugin eval has no sandbox on Windows, and these cases grant Bash: run this script in WSL." >&2
+        exit 1
+        ;;
+esac
 
 # The Bash sandbox refuses to start when a PATH directory cannot be listed, and WSL appends Windows directories that cannot.
 # A plain Linux PATH also keeps runs from calling Windows programs.
@@ -26,6 +32,7 @@ evals="$(basename "$suite")/evals"
 claude plugin eval . --eval-dir "$evals" --scaffold --trust-plugin --no-publish \
     --ablation "${EVAL_ABLATION:-with-without}" \
     --model "${EVAL_MODEL:-claude-sonnet-5-5}" \
+    --judge-model "${EVAL_JUDGE_MODEL:-claude-sonnet-5-5}" \
     --runs "${EVAL_RUNS:-3}" \
     --max-cost-usd "${EVAL_MAX_COST_USD:-40}" \
     "$@" \

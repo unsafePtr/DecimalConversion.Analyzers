@@ -1,7 +1,7 @@
 ---
 type: regex
-weight: 2
+weight: 1
 target: { source: file, path: TestResults/summary.txt }
-pattern: '^dcv-warnings=0$'
+pattern: '^build-files=unchanged$'
 flags: m
 ---

@@ -1,0 +1,7 @@
+---
+type: regex
+weight: 1
+target: { source: file, path: TestResults/summary.txt }
+pattern: '^build-files=unchanged$'
+flags: m
+---

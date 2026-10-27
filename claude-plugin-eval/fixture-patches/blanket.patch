@@ -1,3 +1,48 @@
+diff --git a/src/Desk.Common/FloatingPoint.cs b/src/Desk.Common/FloatingPoint.cs
+new file mode 100644
+index 0000000..b47530e
+--- /dev/null
++++ b/src/Desk.Common/FloatingPoint.cs
+@@ -0,0 +1,39 @@
++using System.Globalization;
++
++namespace DecimalConversion;
++
++/// <summary>
++/// Converts a double or float to decimal with the rounding .NET used before 11: 15 significant digits for a double, 7 for a float.
++/// </summary>
++/// <remarks>
++/// This is the recipe from https://learn.microsoft.com/dotnet/core/compatibility/core-libraries/11/decimal-biginteger-floating-point-conversions.
++/// </remarks>
++public static class FloatingPoint
++{
++    /// <summary>
++    /// The value without trailing zeros, as a decimal sent through a double came back: 1.20 becomes 1.2.
++    /// </summary>
++    /// <remarks>
++    /// The same recipe on a decimal: the general format with a precision omits trailing zeros, and G29 keeps every digit a decimal holds.
++    /// </remarks>
++    public static decimal Normalize(decimal value)
++    {
++        Span<char> text = stackalloc char[40];
++        value.TryFormat(text, out var length, "G29", CultureInfo.InvariantCulture);
++        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
++    }
++
++    public static decimal ToDecimal(double value)
++    {
++        Span<char> text = stackalloc char[32];
++        value.TryFormat(text, out var length, "G15", CultureInfo.InvariantCulture);
++        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
++    }
++
++    public static decimal ToDecimal(float value)
++    {
++        Span<char> text = stackalloc char[32];
++        value.TryFormat(text, out var length, "G7", CultureInfo.InvariantCulture);
++        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
++    }
++}
 diff --git a/src/Desk.Core/Analytics/FillStats.cs b/src/Desk.Core/Analytics/FillStats.cs
 index a36d442..ef76a56 100644
 --- a/src/Desk.Core/Analytics/FillStats.cs
@@ -78,51 +123,6 @@ index 8593cb2..352fc94 100644
 -    public static decimal RoundToCents(decimal amount) => (decimal)Math.Round((double)amount, 2);
 +    public static decimal RoundToCents(decimal amount) => FloatingPoint.Normalize(Math.Round(amount, 2));
  }
-diff --git a/src/Desk.Core/FloatingPoint.cs b/src/Desk.Core/FloatingPoint.cs
-new file mode 100644
-index 0000000..75b3caf
---- /dev/null
-+++ b/src/Desk.Core/FloatingPoint.cs
-@@ -0,0 +1,39 @@
-+﻿using System.Globalization;
-+
-+namespace DecimalConversion;
-+
-+/// <summary>
-+/// Converts a double or float to decimal with the rounding .NET used before 11: 15 significant digits for a double, 7 for a float.
-+/// </summary>
-+/// <remarks>
-+/// This is the recipe from https://learn.microsoft.com/dotnet/core/compatibility/core-libraries/11/decimal-biginteger-floating-point-conversions.
-+/// </remarks>
-+public static class FloatingPoint
-+{
-+    /// <summary>
-+    /// The value without trailing zeros, as a decimal sent through a double came back: 1.20 becomes 1.2.
-+    /// </summary>
-+    /// <remarks>
-+    /// The same recipe on a decimal: the general format with a precision omits trailing zeros, and G29 keeps every digit a decimal holds.
-+    /// </remarks>
-+    public static decimal Normalize(decimal value)
-+    {
-+        Span<char> text = stackalloc char[40];
-+        value.TryFormat(text, out var length, "G29", CultureInfo.InvariantCulture);
-+        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
-+    }
-+
-+    public static decimal ToDecimal(double value)
-+    {
-+        Span<char> text = stackalloc char[32];
-+        value.TryFormat(text, out var length, "G15", CultureInfo.InvariantCulture);
-+        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
-+    }
-+
-+    public static decimal ToDecimal(float value)
-+    {
-+        Span<char> text = stackalloc char[32];
-+        value.TryFormat(text, out var length, "G7", CultureInfo.InvariantCulture);
-+        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
-+    }
-+}
 diff --git a/src/Desk.Core/Invoices/LineTotal.cs b/src/Desk.Core/Invoices/LineTotal.cs
 index 6b1d7bf..def97da 100644
 --- a/src/Desk.Core/Invoices/LineTotal.cs
@@ -201,7 +201,7 @@ index 43aad91..6d2804a 100644
 +    public static double Ask(double price, int decimals) => (double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, MidpointRounding.ToPositiveInfinity);
  }
 diff --git a/src/Desk.Core/Pricing/TickInfo.cs b/src/Desk.Core/Pricing/TickInfo.cs
-index 7eb8086..0ff28c5 100644
+index 7eb8086..f941329 100644
 --- a/src/Desk.Core/Pricing/TickInfo.cs
 +++ b/src/Desk.Core/Pricing/TickInfo.cs
 @@ -1,6 +1,8 @@
@@ -212,7 +212,7 @@ index 7eb8086..0ff28c5 100644
  public static class TickInfo
  {
 -    public static int Decimals(double tickSize) => ((decimal)tickSize).Scale;
-+    public static int Decimals(double tickSize) => (FloatingPoint.ToDecimal(tickSize)).Scale;
++    public static int Decimals(double tickSize) => FloatingPoint.ToDecimal(tickSize).Scale;
  }
 diff --git a/src/Desk.Core/Reports/PnlReport.cs b/src/Desk.Core/Reports/PnlReport.cs
 index 61fca05..fca0d51 100644

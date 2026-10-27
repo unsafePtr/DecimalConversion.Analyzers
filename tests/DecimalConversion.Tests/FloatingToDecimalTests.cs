@@ -73,6 +73,41 @@ public class FloatingToDecimalTests
         DefaultHelper);
 
     [Fact]
+    public Task CastInParenthesesForAMember_ParenthesesDropped() => Verify.VerifyAsync(
+        """
+        class C
+        {
+            int M(double tick) => ({|DCV001:(decimal)tick|}).Scale;
+        }
+        """,
+        """
+        using DecimalConversion;
+
+        class C
+        {
+            int M(double tick) => FloatingPoint.ToDecimal(tick).Scale;
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task ConstantInParenthesesForAMember_ParenthesesDroppedUnlessNegative() => Verify.VerifyAsync(
+        """
+        class C
+        {
+            int Scale => ({|DCV002:(decimal)0.25|}).Scale;
+            string Text => ({|DCV002:(decimal)-0.25|}).ToString();
+        }
+        """,
+        """
+        class C
+        {
+            int Scale => 0.25m.Scale;
+            string Text => (-0.25m).ToString();
+        }
+        """);
+
+    [Fact]
     public Task ConvertToDecimal_HelperCall() => Verify.VerifyAsync(
         """
         using System;

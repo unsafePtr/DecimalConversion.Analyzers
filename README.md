@@ -25,14 +25,16 @@ Not reported, though the same change affects them:
 
 The fix calls `DecimalConversion.FloatingPoint.ToDecimal`, the recipe from the breaking-change page.
 It formats a double with `G15` or a float with `G7` and parses the text back.
-When the callers cannot see it, the fix adds a public `FloatingPoint.cs` to the closest project they all reference.
+When the callers cannot see it, the fix adds a public `FloatingPoint.cs` to the closest project they all reference, with the encoding and line endings of the files already there.
 Callers that share no such project each get an internal copy.
 netstandard2.0 lacks `double.TryFormat`, so a netstandard2.0 caller with no other project to host the helper gets a copy it cannot compile.
 
-To call another method, such as one the code already has, name it in `.editorconfig`:
+To put the helper in another project that every caller references, such as a shared one lower down, name the project in `.editorconfig`; a project some caller does not reference is passed over for the closest shared one.
+To call another method, such as one the code already has, name it as well:
 
 ```ini
 [*.cs]
+decimal_conversion_helper_project = MyCompany.Common
 decimal_conversion_helper = MyCompany.Numerics.FloatingPoint.ToDecimal
 ```
 
@@ -75,16 +77,21 @@ A helper type the code already has without `Normalize` gets the second form.
 
 ## Use
 
-1. Reference the `DecimalConversion.Analyzer` package from every project to fix, or build it with `dotnet pack src/DecimalConversion.CodeFixes -c Release -o artifacts`.
+The package is meant to be installed for the migration and removed after it, leaving only the fixes and the helper.
+
+1. Copy `.editorconfig` and `Directory.Build.props` aside, and reference the `DecimalConversion.Analyzer` package from `Directory.Build.props` with `PrivateAssets="all"`, or build it with `dotnet pack src/DecimalConversion.CodeFixes -c Release -o artifacts`.
 2. Run `dotnet build --no-incremental`: every DCV warning is a site, found by the compiler rather than by a text search.
-3. Decide per site, since many need no change; the skill in [claude-plugin](claude-plugin) is that triage.
-4. To fix every site at once instead, run `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005` over the whole solution, since fixing one project puts the helper there, and delete the `<Compile Include="FloatingPoint.cs" />` line it adds with each helper (NETSDK1022).
-5. Check that the build reports no DCV warning you have not decided on, the tests pass, and a search finds none of the unreported conversions above.
-6. Remove the package, or keep it to catch new conversions; as a development dependency it does not flow to projects that reference yours. If you keep it, suppress each site you decided to leave with `#pragma warning disable` and its reason.
+3. Choose the project for the helper, copy its project file aside, and name it with `decimal_conversion_helper_project` in `.editorconfig`.
+4. Decide per site, since many need no change; the skill in [claude-plugin](claude-plugin) is that triage. Turn off the rule for each file whose sites you keep, with `dotnet_diagnostic.DCV001.severity = none` in a section for that file.
+5. Run `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 --severity warn --report <folder>` once over the whole solution, so it sees every caller of the helper. `analyzers` runs no whitespace or style formatting, `--diagnostics` keeps the fixes of other analyzers out, and the report lists each site it fixed.
+6. Build again, where no DCV warning may be left, and run the tests on net10.0 and net11.0 while the `.editorconfig` entries are still in place. A kept site that needs the fix after all loses its entry, and `dotnet format` runs again.
+7. Put the copies back, which removes the package, the `.editorconfig` entries and the `<Compile Include="FloatingPoint.cs" />` item that `dotnet format` writes into the helper's project file, re-saving that file with line endings of its own. The helper stays. Build and test once more, and check that a search finds none of the unreported conversions above.
+
+To keep the package in the build to check new code instead, suppress each kept site with `#pragma warning disable` and its reason; as a development dependency it does not flow to projects that reference yours.
 
 ## Skill
 
 [claude-plugin](claude-plugin) is a Claude Code plugin with the `dotnet11-floating-point` skill.
-Instead of converting every site, it has the agent decide per site whether .NET 11 changes anything that matters, keep the plain cast where it does not, and fix the rest.
-When asked for .NET 10's results everywhere, it converts every site instead, with the fix the analyzer would apply to each.
-[claude-plugin-eval](claude-plugin-eval) measures it with `claude plugin eval` against an agent without it; see [the latest results](claude-plugin-eval/results/2026-10-27-sonnet-5.5.md).
+It has the agent follow the steps above: the build lists the sites, the agent decides per site whether .NET 11 changes anything that matters and keeps the plain cast where it does not, and `dotnet format` applies the analyzer's fix to the rest, so the agent needs neither to search the code nor to edit a site by hand.
+When asked for .NET 10's results everywhere, it skips the decision and lets the fix convert every site.
+[claude-plugin-eval](claude-plugin-eval) measures it with `claude plugin eval` against an agent without it; see [the latest results](claude-plugin-eval/results/2026-10-27-dotnet-format-sonnet-5.5.md).

@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Simplification;
+using Microsoft.CodeAnalysis.Text;
 
 namespace DecimalConversion;
 
@@ -87,7 +88,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
             {
                 if (node is CastExpressionSyntax cast && model.GetOperation(cast, cancellationToken) is IConversionOperation { Operand.ConstantValue: { HasValue: true, Value: { } constant } })
                 {
-                    editor.ReplaceNode(cast, SyntaxFactory.ParseExpression(FloatingToDecimalAnalyzer.Literal(constant)).WithTriviaFrom(cast));
+                    Replace(editor, cast, SyntaxFactory.ParseExpression(FloatingToDecimalAnalyzer.Literal(constant)));
                 }
 
                 continue;
@@ -99,7 +100,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
                 {
                     var normalize = equivalenceKey != PlainRoundTripKey && CanNormalize(model.Compilation, helper);
                     var replacement = normalize ? NormalizeCall(helper, kept) : AsCastOperand(kept);
-                    editor.ReplaceNode(node, replacement.WithTriviaFrom(node));
+                    Replace(editor, node, replacement);
                     usesHelper |= normalize && !IsInsideNamespace(node, helper.Namespace);
                 }
 
@@ -110,7 +111,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
             {
                 if (model.GetOperation(node, cancellationToken) is IInvocationOperation invocation && RoundThroughDecimal(invocation, helper) is { } rounded)
                 {
-                    editor.ReplaceNode(node, rounded.WithTriviaFrom(node));
+                    Replace(editor, node, rounded);
                     usesHelper |= !IsInsideNamespace(node, helper.Namespace);
                 }
 
@@ -123,7 +124,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            editor.ReplaceNode(node, HelperCall(helper, operand).WithTriviaFrom(node));
+            Replace(editor, node, HelperCall(helper, operand));
             usesHelper |= !IsInsideNamespace(node, helper.Namespace);
         }
 
@@ -136,11 +137,25 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
         return document.WithSyntaxRoot(changed);
     }
 
+    // A call or a literal needs no parentheses, so the ones that held the cast go with it.
+    // ((decimal)x).Scale becomes FloatingPoint.ToDecimal(x).Scale.
+    private static void Replace(DocumentEditor editor, SyntaxNode node, ExpressionSyntax replacement)
+    {
+        var target = replacement is InvocationExpressionSyntax or LiteralExpressionSyntax && node.Parent is ParenthesizedExpressionSyntax parentheses ? parentheses : node;
+        editor.ReplaceNode(target, replacement.WithTriviaFrom(target));
+    }
+
+    /// <summary>
+    /// The .editorconfig key that names the project to hold the helper, by its project or assembly name.
+    /// </summary>
+    internal const string HostProjectKey = "decimal_conversion_helper_project";
+
     /// <summary>
     /// Gives every project whose changed code calls a helper it cannot see access to one.
     /// </summary>
     /// <remarks>
-    /// One public copy goes to the closest project that all those callers depend on, so the solution shares a single helper.
+    /// One public copy goes to the project named by <see cref="HostProjectKey"/>, so the solution shares a single helper.
+    /// Without one, or when a caller does not depend on it, the copy goes to the closest project all those callers depend on.
     /// Only a fix over the whole solution sees every caller; fixing one project at a time puts the helper in that project.
     /// A caller that still cannot see it, because no shared project fits, gets an internal copy of its own.
     /// Those are added in dependency order, so a project reached through InternalsVisibleTo uses its reference's copy (CS0436).
@@ -148,19 +163,25 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
     internal static async Task<Solution> AddMissingHelpersAsync(Solution original, Solution changed, CancellationToken cancellationToken)
     {
         var callers = new Dictionary<string, (HelperOption Helper, HashSet<ProjectId> Projects)>(StringComparer.Ordinal);
+        var hosts = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var projectChange in changed.GetChanges(original).GetProjectChanges())
         {
             foreach (var documentId in projectChange.GetChangedDocuments())
             {
                 var document = changed.GetDocument(documentId)!;
                 var tree = await document.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
-                var helper = HelperOption.Read(document.Project.AnalyzerOptions.AnalyzerConfigOptionsProvider, tree!);
+                var options = document.Project.AnalyzerOptions.AnalyzerConfigOptionsProvider;
+                var helper = HelperOption.Read(options, tree!);
                 if (!callers.TryGetValue(MetadataName(helper), out var entry))
                 {
                     callers[MetadataName(helper)] = entry = (helper, new HashSet<ProjectId>());
                 }
 
                 entry.Projects.Add(projectChange.ProjectId);
+                if (!hosts.ContainsKey(MetadataName(helper)) && options.GetOptions(tree!).TryGetValue(HostProjectKey, out var host) && !string.IsNullOrWhiteSpace(host))
+                {
+                    hosts[MetadataName(helper)] = host.Trim();
+                }
             }
         }
 
@@ -183,11 +204,17 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
             }
 
             var shared = missing.Select(id => graph.GetProjectsThatThisProjectTransitivelyDependsOn(id).Add(id)).Aggregate(static (a, b) => a.Intersect(b));
-            for (var i = order.Count - 1; i >= 0; i--)
+            var candidates = order.AsEnumerable().Reverse().Where(shared.Contains);
+            if (hosts.TryGetValue(MetadataName(helper), out var hostName))
             {
-                if (shared.Contains(order[i]) && await CanHostAsync(changed.GetProject(order[i])!, helper, cancellationToken).ConfigureAwait(false))
+                candidates = candidates.OrderBy(id => changed.GetProject(id) is { } project && (project.Name == hostName || project.AssemblyName == hostName) ? 0 : 1);
+            }
+
+            foreach (var id in candidates.ToList())
+            {
+                if (await CanHostAsync(changed.GetProject(id)!, helper, cancellationToken).ConfigureAwait(false))
                 {
-                    changed = await AddHelperAsync(changed.GetProject(order[i])!, helper, isPublic: true, cancellationToken).ConfigureAwait(false);
+                    changed = await AddHelperAsync(changed.GetProject(id)!, helper, isPublic: true, cancellationToken).ConfigureAwait(false);
                     break;
                 }
             }
@@ -235,7 +262,37 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
         document = await ImportAdder.AddImportsAsync(document, Simplifier.AddImportsAnnotation, cancellationToken: cancellationToken).ConfigureAwait(false);
         document = await Simplifier.ReduceAsync(document, Simplifier.Annotation, cancellationToken: cancellationToken).ConfigureAwait(false);
         document = await Formatter.FormatAsync(document, Formatter.Annotation, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return document.Project.Solution;
+        var text = await LikeExistingFilesAsync(project, await document.GetTextAsync(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+        return document.WithText(text).Project.Solution;
+    }
+
+    // The new file takes the encoding and line breaks of a source file the solution already has.
+    // So it brings no byte order mark or line endings of its own.
+    private static async Task<SourceText> LikeExistingFilesAsync(Project project, SourceText text, CancellationToken cancellationToken)
+    {
+        SourceText? sample = null;
+        foreach (var document in project.Documents.Concat(project.Solution.Projects.SelectMany(p => p.Documents)))
+        {
+            var candidate = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+            if (document.FilePath is not null && !IsGenerated(document.Name, candidate))
+            {
+                sample = candidate;
+                break;
+            }
+        }
+
+        var crlf = sample is { Lines.Count: > 1 } && sample.Lines[0].EndIncludingLineBreak - sample.Lines[0].End == 2;
+        var content = text.ToString().Replace("\r\n", "\n");
+        return SourceText.From(crlf ? content.Replace("\n", "\r\n") : content, sample?.Encoding);
+    }
+
+    // The files the build writes, such as GlobalUsings.g.cs and AssemblyInfo.cs, say so in their first lines.
+    private static bool IsGenerated(string name, SourceText text)
+    {
+        var header = text.ToString(new TextSpan(0, Math.Min(text.Length, 256)));
+        return name.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+            || header.IndexOf("auto-generated", StringComparison.OrdinalIgnoreCase) >= 0
+            || header.IndexOf("autogenerated", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     // The expression the runtime converted: the cast operand without its own parentheses, or the single argument.

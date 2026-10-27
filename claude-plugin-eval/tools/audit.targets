@@ -1,0 +1,10 @@
+<Project>
+  <!-- test.sh imports this through CustomBeforeMicrosoftCommonTargets to count the sites left. -->
+  <!-- It adds the analyzer whether or not the solution still references it, and in place of the copy it does reference. -->
+  <Target Name="DecimalConversionAudit" BeforeTargets="CoreCompile" Condition="'$(DecimalConversionAuditAnalyzers)' != ''">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'DecimalConversion.Analyzers' Or '%(Filename)' == 'DecimalConversion.CodeFixes'" />
+      <Analyzer Include="$(DecimalConversionAuditAnalyzers)/DecimalConversion.Analyzers.dll" />
+    </ItemGroup>
+  </Target>
+</Project>

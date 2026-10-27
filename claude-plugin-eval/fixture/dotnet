@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # Runs the .NET SDK with everything it writes kept inside this folder.
+# It runs in the eval sandbox on Linux and in Git Bash on Windows.
 # The eval sandbox allows writes only here and hides the home directory, so the CLI home, the NuGet folders and the temp directory point here.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export DOTNET_CLI_HOME="$root/.dotnet-home"
-export NUGET_PACKAGES="$root/.packages"
-export NUGET_HTTP_CACHE_PATH="$root/.tmp/nuget-http"
-export NUGET_PLUGINS_CACHE_PATH="$root/.tmp/nuget-plugins"
+# A Windows dotnet takes C:/ paths, not the /c/ ones Git Bash gives; cygpath exists only there.
+native() {
+    if command -v cygpath > /dev/null; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+export DOTNET_CLI_HOME="$(native "$root/.dotnet-home")"
+export NUGET_PACKAGES="$(native "$root/.packages")"
+export NUGET_HTTP_CACHE_PATH="$(native "$root/.tmp/nuget-http")"
+export NUGET_PLUGINS_CACHE_PATH="$(native "$root/.tmp/nuget-plugins")"
 export TMPDIR="$root/.tmp"
 export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 DOTNET_GENERATE_ASPNET_CERTIFICATE=false
 export MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0 UseSharedCompilation=false NuGetAudit=false
 # Each run's folder sits inside a git repository whose metadata the sandbox hides, so Source Link's git queries fail the build.
 export EnableSourceControlManagerQueries=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1
-mkdir -p "$DOTNET_CLI_HOME" "$TMPDIR"
-# The sandbox refuses Unix domain sockets, which MSBuild's worker nodes and the build host of dotnet format both connect through.
+mkdir -p "$root/.dotnet-home" "$TMPDIR"
+# MSBuild's worker nodes and the build host of dotnet format connect through Unix domain sockets, which the sandbox refuses.
 # A build that asks for a worker node waits five minutes and fails, so MSBuild builds in its own process.
 # The CLI passes its own -maxcpucount after a Directory.Build.rsp, so the switch has to come from here.
 case "${1:-}" in
@@ -21,8 +26,32 @@ case "${1:-}" in
         set -- "$1" -m:1 "${@:2}"
         ;;
     format)
-        echo "dotnet format cannot run here: the sandbox refuses the Unix socket its build host needs. Edit the files instead." >&2
-        exit 1
+        # dotnet format cannot start its build host here, so this stands in for it with the same fixes in one process.
+        # A build records each project's compiler command line.
+        # DcvFormat loads the projects from those and applies the fixes with dotnet format's own Roslyn.
+        shift
+        command='' workspace='' restore=() rest=()
+        for arg in "$@"; do
+            case "$arg" in
+                analyzers|whitespace|style) command="$arg" ;;
+                --no-restore) restore=(--no-restore) ;;
+                *.sln|*.slnx|*.csproj) if [[ -z $workspace && ${#rest[@]} -eq 0 ]]; then workspace="$arg"; else rest+=("$arg"); fi ;;
+                *) rest+=("$arg") ;;
+            esac
+        done
+        if [[ $command != analyzers ]]; then
+            echo "Only 'dotnet format analyzers' can run through this wrapper." >&2
+            exit 1
+        fi
+        workspace="${workspace:-$(ls ./*.slnx ./*.sln 2>/dev/null | head -n 1)}"
+        find . -path '*/obj/*' -name dcv-format.args -delete
+        if ! dotnet build "$workspace" --no-incremental -m:1 -v:q -nologo -clp:NoSummary "${restore[@]}" -p:DcvFormatRecord=true -p:ProvideCommandLineArgs=true "-p:CustomAfterMicrosoftCommonTargets=$(native "$root/.eval/format/record.targets")" > "$TMPDIR/format-build.log" 2>&1; then
+            grep -E ': error ' "$TMPDIR/format-build.log" | sort -u | head -n 20 >&2
+            exit 1
+        fi
+        mapfile -t records < <(find . -path '*/obj/*' -name dcv-format.args)
+        roslyn="$(dirname "$(readlink -f "$(command -v dotnet)")")/sdk/$(dotnet --version)/DotnetTools/dotnet-format"
+        exec dotnet "$(native "$root/.eval/format/DcvFormat.dll")" "${rest[@]}" --roslyn "$(native "$roslyn")" --records "${records[@]}"
         ;;
 esac
 exec dotnet "$@"

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <!-- No symbols, so a stack trace in an eval run names no path of this repository. -->
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <!-- Compiled against these packages, but run with their copies in the SDK's dotnet-format folder. None of them is published. -->
+  <!-- Those copies target the SDK's own runtime, hence net11.0. The global.json beside this file picks the fixture's SDK. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+</Project>

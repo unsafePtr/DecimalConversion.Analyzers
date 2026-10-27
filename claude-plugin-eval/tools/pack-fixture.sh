@@ -2,17 +2,26 @@
 # Writes each eval case's scaffold.sh with the fixture embedded as a base64 tar.gz.
 # A plugin-eval scaffold starts in the empty workspace and is told neither the case directory nor any EVAL_* variable, so it cannot copy the fixture from a path.
 # Re-run this after any change under fixture/ or fixture-patches/; the generated scaffold.sh files are not committed.
+# It runs in Git Bash on Windows or on Linux, and the scaffolds it writes hold no path of the machine that wrote them.
 set -euo pipefail
 suite="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture="$suite/fixture"
 
-# The fixture references the analyzer from a feed inside the workspace, so every run builds with the current analyzer and needs no network for it.
+# The agent installs the analyzer from a feed inside the workspace.
+# So every run gets the current analyzer and needs no network for it.
 # Packing under a temporary artifacts path keeps this build's obj and bin apart from the ones a Windows build uses in the same source tree.
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 dotnet pack "$suite/../src/DecimalConversion.CodeFixes" -c Release --artifacts-path "$work/artifacts" -o "$work/feed" -v:q > "$work/pack.log" 2>&1 || { cat "$work/pack.log"; exit 1; }
+# The stand-in for dotnet format that the fixture's dotnet wrapper calls, packed into every workspace.
+# It builds from its own folder, whose global.json picks the same SDK as the fixture's.
+(cd "$suite/tools/format" && dotnet publish DcvFormat.csproj -c Release -o "$work/format" --artifacts-path "$work/format-artifacts" -v:q) > "$work/format.log" 2>&1 || { cat "$work/format.log"; exit 1; }
+cp "$suite/tools/format/record.targets" "$work/format/"
+nupkg="$(basename "$(ls "$work"/feed/DecimalConversion.Analyzer.*.nupkg)")"
+version="${nupkg#DecimalConversion.Analyzer.}"
+version="${version%.nupkg}"
 
-common=(global.json nuget.config Desk.slnx Directory.Build.props .editorconfig .gitignore dotnet test.sh src/Desk.Core/Desk.Core.csproj src/Desk.Core/Quote.cs tests/Desk.Tests/Desk.Tests.csproj)
+common=(global.json nuget.config Desk.slnx Directory.Build.props .editorconfig .gitignore dotnet test.sh src/Desk.Common src/Desk.Core/Desk.Core.csproj src/Desk.Core/Quote.cs tests/Desk.Tests/Desk.Tests.csproj)
 harmless=(src/Desk.Core/Analytics src/Desk.Core/Diagnostics src/Desk.Core/Time src/Desk.Core/Pricing/MidPrice.cs tests/Desk.Tests/AnalyticsTests.cs tests/Desk.Tests/DiagnosticsTests.cs)
 
 # pack <case> <full|harmless> [patch file name]
@@ -28,7 +37,14 @@ pack() {
     cp "$work"/feed/*.nupkg "$stage/.nuget-feed/"
 
     mkdir -p "$stage/.eval"
-    (cd "$stage" && sha256sum tests/Desk.Tests/*.cs tests/Desk.Tests/Desk.Tests.csproj > .eval/tests.sha256)
+    cp "$suite/tools/audit.targets" "$stage/.eval/"
+    cp -r "$work/format" "$stage/.eval/format"
+    (
+        cd "$stage"
+        sha256sum tests/Desk.Tests/*.cs tests/Desk.Tests/Desk.Tests.csproj > .eval/tests.sha256
+        sha256sum Directory.Build.props .editorconfig Desk.slnx nuget.config global.json $(find src tests -name '*.csproj' | LC_ALL=C sort) > .eval/build.sha256
+        find src -name '*.cs' | LC_ALL=C sort > .eval/sources.txt
+    )
     if [[ -n $patch ]]; then
         cp "$suite/fixture-patches/$patch" "$stage/.eval/$patch"
     fi
@@ -50,6 +66,12 @@ PAYLOAD
 chmod +x dotnet test.sh
 $apply
 ./dotnet restore tests/Desk.Tests/Desk.Tests.csproj -v:q
+# The agent adds the analyzer itself.
+# Restoring it once here puts it in the workspace's package folder, so the agent's restore needs no network.
+mkdir -p .tmp/prime
+echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><PackageReference Include="DecimalConversion.Analyzer" Version="$version" /></ItemGroup></Project>' > .tmp/prime/prime.csproj
+./dotnet restore .tmp/prime/prime.csproj -v:q
+rm -rf .tmp/prime
 EOF
     chmod +x "$case_dir/scaffold.sh"
     echo "packed $1 ($variant${patch:+, $patch})"

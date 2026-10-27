@@ -1,0 +1,8 @@
+<Project>
+  <!-- The fixture's dotnet wrapper builds with this file, so that each project leaves its compiler command line in obj. -->
+  <!-- DcvFormat loads the projects from those files. -->
+  <Target Name="RecordCompilerCommandLine" AfterTargets="CoreCompile" Condition="'$(DcvFormatRecord)' == 'true'">
+    <WriteLinesToFile File="$(IntermediateOutputPath)dcv-format.args" Lines="$(MSBuildProjectFullPath);@(IntermediateAssembly->'%(FullPath)');@(IntermediateRefAssembly->'%(FullPath)');$(TargetPath);$(TargetRefPath);--" Overwrite="true" />
+    <WriteLinesToFile File="$(IntermediateOutputPath)dcv-format.args" Lines="@(CscCommandLineArgs)" />
+  </Target>
+</Project>
