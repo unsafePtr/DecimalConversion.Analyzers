@@ -86,4 +86,5 @@ A helper type the code already has without `Normalize` gets the second form.
 
 [claude-plugin](claude-plugin) is a Claude Code plugin with the `dotnet11-floating-point` skill.
 Instead of converting every site, it has the agent decide per site whether .NET 11 changes anything that matters, keep the plain cast where it does not, and fix the rest.
-[claude-plugin-eval](claude-plugin-eval) measures it with `claude plugin eval` against an agent without it; see [the first results](claude-plugin-eval/results/2026-10-26-sonnet-5.5.md).
+When asked for .NET 10's results everywhere, it converts every site instead, with the fix the analyzer would apply to each.
+[claude-plugin-eval](claude-plugin-eval) measures it with `claude plugin eval` against an agent without it; see [the latest results](claude-plugin-eval/results/2026-10-27-sonnet-5.5.md).

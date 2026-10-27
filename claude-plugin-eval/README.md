@@ -8,13 +8,15 @@ The suite is kept apart from the plugin so that an agent using the skill cannot 
 
 ## Results
 
-| Run | migrate | no-op | symptom | Report |
-|---|---|---|---|---|
-| Sonnet 5.5, 2026-10-26 | 1.00 vs 0.81 | 1.00 vs 0.64 | 0.96 vs 0.91 | [analysis](results/2026-10-26-sonnet-5.5.md) |
+| Run | migrate | migrate-full | no-op | symptom | Report |
+|---|---|---|---|---|---|
+| Sonnet 5.5, 2026-10-26 | 1.00 vs 0.81 | | 1.00 vs 0.64 | 0.96 vs 0.91 | [analysis](results/2026-10-26-sonnet-5.5.md) |
+| Sonnet 5.5, 2026-10-27 | 1.00 vs 0.71 | 1.00 vs 0.98 | 1.00 vs 0.52 | 1.00 vs 0.87 | [analysis](results/2026-10-27-sonnet-5.5.md) |
 
-Scores are with the skill against without it.
-Both arms fixed every site .NET 11 breaks; without the skill the agent also rewrote harmless casts in 8 of 9 runs.
-That run predates the analyzer in the fixture's build and the invoice site, with 27 tests per framework.
+Scores are with the skill against without it; the second run's leave out a grader that was removed after it, as its analysis explains.
+Both arms fixed every site .NET 11 breaks, and both converted every site when `migrate-full` asked for it.
+Without the skill the agent also rewrote harmless casts when asked to change only what needs to change, in 8 of 9 runs of the first run and 7 of 9 of the second.
+The first run predates the analyzer in the fixture's build and the invoice site, with 27 tests per framework.
 
 ## The fixture
 
@@ -50,16 +52,24 @@ Both pass all 30 tests on both frameworks and leave no warning, so only the grad
 
 | Case | Prompt | Measures |
 |---|---|---|
-| `migrate` | move the solution to .NET 11, changing only what needs to change | the full triage |
+| `migrate` | move the solution to .NET 11, changing only what needs to change | the full triage, with as few changes as keep the results right |
+| `migrate-full` | move it to .NET 11 with .NET 10's results everywhere, fixing every site the analyzer reports and suppressing none | a complete and correct conversion of every site |
 | `symptom` | a production report of refused quantities and bids a tick low | whether the fix reaches every site with the same cause, and no others |
 | `no-op` | the `migrate` prompt on a variant with only the sites to keep | whether the agent can conclude that nothing needs to change |
-| `calibration-golden` | run the tests on the solution with the reference patch, which the scaffold applies | the graders give it a full score |
-| `calibration-blanket` | the same with the helper-everywhere patch | the graders catch every needless rewrite |
+| `calibration-golden` | run the tests on the solution with the reference patch, which the scaffold applies | the `migrate` graders give it a full score |
+| `calibration-blanket` | the same with the helper-everywhere patch | the `migrate` graders catch every needless rewrite |
+| `calibration-full` | the helper-everywhere patch under the `migrate-full` graders | those graders give it a full score |
 
-Graders read `TestResults/summary.txt`, which `./test.sh` writes after one `--no-incremental` build: the TRX counters of both frameworks, the number of DCV warnings the build still reports, and whether the test files are unchanged.
-The warning count is there for the analysis and is not graded, since a kept site with its warning left in place is not wrong.
-Regex graders check each site: the two untested sites must no longer hold the raw cast, and each site to keep must still hold its original expression.
-Two trace graders, at half weight, check that the agent ran `./test.sh` and a `dotnet build` or `dotnet format`; another fails any run that reads the suite's own files.
+`migrate` and `migrate-full` start from the same solution and ask for opposite things, so together they show whether the skill follows the request rather than one fixed policy.
+The golden patch would fail `migrate-full` on its suppressions, and the blanket patch fails `migrate` on its six needless rewrites.
+
+Graders read `TestResults/summary.txt`, which `./test.sh` writes after one `--no-incremental` build.
+It holds the TRX counters of both frameworks, the number of DCV warnings the build still reports, the number of places that suppress one, whether the build still references the analyzer, and whether the test files are unchanged.
+`migrate` does not grade the warnings, since a kept site with its warning left in place is not wrong.
+`migrate-full` requires no warning, no suppression and the analyzer still referenced; together they mean every site was changed.
+Regex graders check each site in the other cases: the two untested sites must no longer hold the raw cast, and each site to keep must still hold its original expression.
+A trace grader, at half weight, checks that the agent ran `./test.sh`, and another fails any run that reads the suite's own files.
+No grader asks for a separate `dotnet build`, since `./test.sh` already builds with the analyzer and writes its warnings to `TestResults/build.log`.
 An LLM grader judges whether the final report accounts for every site; in `no-op`, suppressing a kept site's warning counts as no change.
 
 ## Prerequisites, in WSL2
@@ -85,15 +95,16 @@ read -rs token && printf '%s' "$token" > ~/.claude-eval-token && chmod 600 ~/.cl
 The SDKs go outside the home directory because the sandbox cannot read it.
 The fixture's `./dotnet` wrapper keeps the SDK's home, NuGet folders and temp files inside the workspace, the only place the sandbox lets a run write.
 It also turns off Source Link's git queries: each run's workspace sits inside a git repository that `plugin eval` creates and the sandbox hides, so those queries fail the build.
-It runs MSBuild in a single process, because the sandbox stops it from starting a worker node, and a build that asks for one waits five minutes and fails with no error.
-`dotnet build` passes its own `-maxcpucount` after the switches of a `Directory.Build.rsp`, so the wrapper adds `-m:1` to each command that runs MSBuild.
+The sandbox refuses to create Unix domain sockets, which MSBuild's worker nodes and the build host of `dotnet format` both connect through.
+A build that asks for a worker node waits five minutes and fails with no error, so the wrapper adds `-m:1` to each command that runs MSBuild; a `Directory.Build.rsp` cannot, since `dotnet build` passes its own `-maxcpucount` after it.
+`dotnet format` cannot load a solution at all here, so the wrapper refuses it at once with that reason, the same in both arms, rather than let a run wait one to five minutes for it to fail.
 `run-eval.sh` runs with a plain Linux `PATH`, because the sandbox refuses to start when a `PATH` directory cannot be listed, and WSL adds Windows directories that cannot.
 The sandbox blocks the network, so the build's calls to nuget.org and to the SDK's update check are denied; the scaffold restores beforehand, so they do no harm.
 
 ## Run
 
 ```bash
-bash claude-plugin-eval/tools/run-eval.sh                          # the three scored cases, 3 runs per arm
+bash claude-plugin-eval/tools/run-eval.sh -j 3                     # the four scored cases, 3 runs per arm
 EVAL_TAG=calibration EVAL_ABLATION=none bash claude-plugin-eval/tools/run-eval.sh --runs 1
 EVAL_ABLATION=none bash claude-plugin-eval/tools/run-eval.sh --case migrate --runs 1 --keep-temp
 ```

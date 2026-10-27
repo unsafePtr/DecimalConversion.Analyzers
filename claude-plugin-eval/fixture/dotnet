@@ -13,11 +13,16 @@ export MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0 UseSharedCompil
 # Each run's folder sits inside a git repository whose metadata the sandbox hides, so Source Link's git queries fail the build.
 export EnableSourceControlManagerQueries=false DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE=1
 mkdir -p "$DOTNET_CLI_HOME" "$TMPDIR"
-# MSBuild cannot start a worker node in the sandbox and waits five minutes before failing the build, so it builds in its own process.
+# The sandbox refuses Unix domain sockets, which MSBuild's worker nodes and the build host of dotnet format both connect through.
+# A build that asks for a worker node waits five minutes and fails, so MSBuild builds in its own process.
 # The CLI passes its own -maxcpucount after a Directory.Build.rsp, so the switch has to come from here.
 case "${1:-}" in
     build|test|pack|publish|clean|restore|msbuild)
         set -- "$1" -m:1 "${@:2}"
+        ;;
+    format)
+        echo "dotnet format cannot run here: the sandbox refuses the Unix socket its build host needs. Edit the files instead." >&2
+        exit 1
         ;;
 esac
 exec dotnet "$@"

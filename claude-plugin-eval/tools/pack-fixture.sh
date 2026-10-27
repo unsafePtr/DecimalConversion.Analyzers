@@ -56,7 +56,9 @@ EOF
 }
 
 pack migrate full
+pack migrate-full full
 pack symptom full
 pack no-op harmless
 pack calibration-golden full golden.patch
 pack calibration-blanket full blanket.patch
+pack calibration-full full blanket.patch

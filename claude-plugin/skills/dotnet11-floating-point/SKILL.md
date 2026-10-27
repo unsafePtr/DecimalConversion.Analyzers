@@ -1,6 +1,6 @@
 ---
 name: dotnet11-floating-point
-description: Use when C# code moves to .NET 11 or to the .NET 11 SDK and it converts double or float to decimal, or rounds a double to a number of decimal digits with Math.Round or double.Round. Also use for the symptoms, such as decimals with 28-digit tails like 0.0002000000000000000095843472, prices or sizes refused for too many decimals, values one tick or one cent off, or a decimal's Scale jumping to 28. It finds the sites with the DecimalConversion analyzer in dotnet build, decides per site whether the plain cast can stay, and fixes only the sites .NET 11 actually breaks.
+description: Use when C# code moves to .NET 11 or to the .NET 11 SDK and it converts double or float to decimal, or rounds a double to a number of decimal digits with Math.Round or double.Round. Also use for the symptoms, such as decimals with 28-digit tails like 0.0002000000000000000095843472, prices or sizes refused for too many decimals, values one tick or one cent off, or a decimal's Scale jumping to 28. It finds the sites with the DecimalConversion analyzer in dotnet build, decides per site whether the plain cast can stay, and fixes only the sites .NET 11 actually breaks, or every site when asked to keep .NET 10's results everywhere.
 ---
 
 # .NET 11 floating point: triage each site, do not convert everything
@@ -13,6 +13,7 @@ description: Use when C# code moves to .NET 11 or to the .NET 11 SDK and it conv
 The converted value differs only from the 16th significant digit on.
 Most code never looks at that digit, so most sites need no change.
 The job is to find every site, decide which ones can see that digit, fix those, and leave the rest exactly as they are.
+If the request is instead to convert every site, follow it: see [When asked to convert every site](#when-asked-to-convert-every-site).
 See [measurements](references/measurements.md) for the numbers behind each rule.
 
 ## 1. Find the sites with the build
@@ -37,7 +38,7 @@ Then run `dotnet build --no-incremental`, so projects that are already up to dat
 | DCV005 | a decimal sent through a double and back, such as `(decimal)Math.Round((double)amount, 2)` |
 
 Only what the analyzer cannot see needs a look by hand: `Convert.ToDecimal(object)` on a boxed double, `IConvertible.ToDecimal`, and JSON readers that turn a double token into a decimal, such as Newtonsoft's `JToken.Value<decimal>()`.
-Do not run the analyzer's code fix over everything with `dotnet format`: it converts every site, which is exactly what the triage below avoids.
+Unless the request is to convert every site, do not run the analyzer's code fix over everything with `dotnet format`: it converts every site, which is exactly what the triage below avoids.
 
 ## 2. Classify each site
 
@@ -116,6 +117,18 @@ public static class FloatingPoint
 netstandard2.0 has no `double.TryFormat`; use `decimal.Parse(value.ToString("G15", CultureInfo.InvariantCulture), NumberStyles.Float, CultureInfo.InvariantCulture)` there.
 For rounding, `(double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, mode)` keeps on-grid prices on the grid and rounds written midpoints the way the text reads; the rounded decimal has at most 15 significant digits, so the cast back gives the same double on both runtimes.
 `decimal.CreateSaturating` and `CreateTruncating` are not fixes, since they changed too.
+
+## When asked to convert every site
+
+A team may want .NET 10's results everywhere rather than a decision per site.
+When the request says so, follow it instead of steps 2 and 3: every DCV warning gets the fix of its kind, and none is kept or suppressed.
+
+- The analyzer's code fix applies exactly those fixes: run `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005` once over the whole solution, so the helper lands in the lowest project.
+- It adds a `<Compile Include="FloatingPoint.cs" />` line next to each helper it writes; delete it, since the SDK already compiles the file (NETSDK1022).
+- Where `dotnet format` cannot load the solution, make the same edits by hand, with the helper above added once: the helper for DCV001, the literal for DCV002, `(double)decimal.Round(FloatingPoint.ToDecimal(x), digits, mode)` for DCV003 and DCV004, and `FloatingPoint.Normalize(Math.Round(amount, n))` for DCV005.
+- `decimal.CreateSaturating` and `CreateTruncating` get no automatic fix: clamp or check the value as the site needs, then call the helper.
+- Build again with `--no-incremental`: no DCV warning may be left.
+- In the report, name each site where the decimal route now throws on NaN, infinity or a value beyond decimal's range where `Math.Round` returned it, usually a computed value.
 
 ## 5. Verify on both runtimes
 

@@ -24,26 +24,34 @@ $keep = [ordered]@{
     'keep-mid-price'      = @('src/Desk.Core/Pricing/MidPrice.cs', 'Math\.Round\(\(bid \+ ask\) / 2, 8\)[\s\S]*MidpointRounding\.AwayFromZero\)')
 }
 
-function Common-Graders([string] $case, [int] $total, [bool] $full, [bool] $agentGraders) {
+function Common-Graders([string] $case, [int] $total, [bool] $agentGraders) {
     $g = Join-Path $evals "$case\graders"
     Write-Lf "$g\tests-net10.md" (Regex-Grader 2 'TestResults/summary.txt' "net10\.0 total=$total passed=$total failed=0")
     Write-Lf "$g\tests-net11.md" (Regex-Grader 3 'TestResults/summary.txt' "net11\.0 total=$total passed=$total failed=0")
     Write-Lf "$g\tests-unchanged.md" (Regex-Grader 2 'TestResults/summary.txt' '^tests-unchanged$' '' 'm')
+    Write-Lf "$g\ran-tests.md" "---`ntype: tool_used`nweight: 0.5`narm: both`ntool: Bash`ninput_match: 'test\.sh'`nmin: 1`n---`n"
+    if ($agentGraders) {
+        Write-Lf "$g\no-peek.md" "---`ntype: regex`nweight: 1`ntarget: trace`npattern: 'claude-plugin-eval|fixture-patches|golden\.patch|blanket\.patch|/graders/'`nmatch: not_contains`n---`n"
+    }
+}
+
+function Keep-Graders([string] $case, [bool] $untestedFixes) {
+    $g = Join-Path $evals "$case\graders"
     foreach ($k in $keep.Keys) {
         Write-Lf "$g\$k.md" (Regex-Grader 1 $keep[$k][0] $keep[$k][1])
     }
-
-    if ($full) {
+    if ($untestedFixes) {
         Write-Lf "$g\fixed-order-text.md" (Regex-Grader 1 'src/Desk.Core/Orders/OrderText.cs' '\(decimal\)(qty|price)' 'not_contains')
         Write-Lf "$g\fixed-balance-check.md" (Regex-Grader 1 'src/Desk.Core/Risk/BalanceCheck.cs' '\(decimal\)available' 'not_contains')
     }
+}
 
-    Write-Lf "$g\ran-tests.md" "---`ntype: tool_used`nweight: 0.5`narm: both`ntool: Bash`ninput_match: 'test\.sh'`nmin: 1`n---`n"
-    if ($agentGraders) {
-        # Whether the agent asked the build for the sites, as the skill says, rather than only searching the code.
-        Write-Lf "$g\ran-build.md" "---`ntype: tool_used`nweight: 0.5`narm: both`ntool: Bash`ninput_match: 'dotnet (build|format)'`nmin: 1`n---`n"
-        Write-Lf "$g\no-peek.md" "---`ntype: regex`nweight: 1`ntarget: trace`npattern: 'claude-plugin-eval|fixture-patches|golden\.patch|blanket\.patch|/graders/'`nmatch: not_contains`n---`n"
-    }
+# With the analyzer still in the build and nothing suppressed, no warning left means every site was changed.
+function Full-Graders([string] $case) {
+    $g = Join-Path $evals "$case\graders"
+    Write-Lf "$g\no-warnings.md" (Regex-Grader 2 'TestResults/summary.txt' '^dcv-warnings=0$' '' 'm')
+    Write-Lf "$g\no-suppressions.md" (Regex-Grader 1 'TestResults/summary.txt' '^dcv-suppressions=0$' '' 'm')
+    Write-Lf "$g\analyzer-kept.md" (Regex-Grader 1 'TestResults/summary.txt' '^analyzer=referenced$' '' 'm')
 }
 
 function Case([string] $case, [string] $description, [string] $tags, [int] $runs, [string] $prompt) {
@@ -56,25 +64,40 @@ $tooling = "Build and test with ``./test.sh``, which runs both frameworks and wr
 
 $migrate = "This solution is moving to .NET 11.`nIts test project already targets net10.0 and net11.0, and global.json uses the .NET 11 SDK.`nMake the code behave correctly on .NET 11, keep the results the tests describe, and change only what needs to change.`n$tooling`nWhen you are done, list every conversion or rounding you looked at and what you did with it."
 
+$migrateFull = "This solution is moving to .NET 11.`nIts test project already targets net10.0 and net11.0, and global.json uses the .NET 11 SDK.`nWe want every conversion and rounding to give the result it gave on .NET 10, without deciding site by site which ones matter, so fix every site the DecimalConversion analyzer reports in the build and suppress none.`n$tooling`nWhen you are done, list every site you changed and how."
+
 $symptom = "We moved our order service to .NET 11 and two things broke.`nThe venue now refuses some orders with ``qty=0.0002999999999999999737189393: too many decimals``, and some passive bids rest one tick below the price we meant.`nThe solution is in this folder, and its tests target net10.0 and net11.0.`nFind the cause and fix it everywhere it applies, without touching code that is fine.`n$tooling`nFinish with what you changed, and what you checked and left alone."
 
 Case 'migrate' 'Open-ended .NET 11 migration of a solution with sensitive and harmless conversions' 'core' 3 $migrate
-Common-Graders 'migrate' 30 $true $true
+Common-Graders 'migrate' 30 $true
+Keep-Graders 'migrate' $true
 Write-Lf "$evals\migrate\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it lists the double-to-decimal conversions and roundings it changed, with how, and separately names the ones it left unchanged, with a reason for each.`nFAIL if it does not mention any unchanged conversion, or gives no reason for leaving them.`n"
 
+Case 'migrate-full' 'The .NET 11 migration on the same solution, asked to convert every site the analyzer reports' 'core' 3 $migrateFull
+Common-Graders 'migrate-full' 30 $true
+Full-Graders 'migrate-full'
+Write-Lf "$evals\migrate-full\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it lists the double-to-decimal conversions and roundings it changed, with how, and does not report leaving any of them unchanged or suppressing a warning.`nFAIL if it reports leaving a reported site unchanged or suppressing a warning, or gives no list of the changes.`n"
+
 Case 'symptom' 'Bug report from a .NET 11 rollout: refused quantities and bids a tick low' 'core' 3 $symptom
-Common-Graders 'symptom' 30 $true $true
+Common-Graders 'symptom' 30 $true
+Keep-Graders 'symptom' $true
 Write-Lf "$evals\symptom\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it explains the cause of both symptoms, says what was changed and how, and names conversions it checked and left unchanged, with a reason for each.`nFAIL if it does not mention looking beyond the two symptoms, or names no conversion it left unchanged.`n"
 
 Case 'no-op' 'The migration prompt on a solution whose conversions are all harmless' 'core' 3 $migrate
-Common-Graders 'no-op' 6 $false $true
+Common-Graders 'no-op' 6 $true
+Keep-Graders 'no-op' $false
 Write-Lf "$evals\no-op\graders\no-new-source.md" "---`ntype: regex`nweight: 1`ntarget: files`npattern: 'src/Desk\.Core/(?!obj/|bin/)\S*\.cs'`nmatch: not_contains`n---`n"
 Write-Lf "$evals\no-op\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it concludes that no conversion or rounding needs to change for .NET 11, or that the only differences are in display values or statistics that nothing depends on, and it names the conversions it checked; suppressing the analyzer's warnings with a reason counts as no change.`nFAIL if it reports routing conversions or roundings through a helper.`n"
 
 # The scaffold applies the patch, so the agent only runs the tests and the graders see the patched solution.
 $calibration = "Run ``./test.sh`` and reply with the content of TestResults/summary.txt.`nDo not change any file."
 Case 'calibration-golden' 'The reference fix, applied by the scaffold, to check the graders score it fully' 'calibration' 1 $calibration
-Common-Graders 'calibration-golden' 30 $true $false
+Common-Graders 'calibration-golden' 30 $false
+Keep-Graders 'calibration-golden' $true
 Case 'calibration-blanket' 'The helper-everywhere fix, applied by the scaffold, to check the keep graders catch it' 'calibration' 1 $calibration
-Common-Graders 'calibration-blanket' 30 $true $false
+Common-Graders 'calibration-blanket' 30 $false
+Keep-Graders 'calibration-blanket' $true
+Case 'calibration-full' 'The helper-everywhere fix under the migrate-full graders, to check they score it fully' 'calibration' 1 $calibration
+Common-Graders 'calibration-full' 30 $false
+Full-Graders 'calibration-full'
 
