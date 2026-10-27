@@ -9,6 +9,8 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!-- The plugin carries the package as the migration's feed, so dotnet pack refreshes that copy. -->
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\claude-plugin\skills\dotnet11-floating-point\packages</PackageOutputPath>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" PrivateAssets="all" />

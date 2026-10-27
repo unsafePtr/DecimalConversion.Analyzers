@@ -1,0 +1,14 @@
+{
+  "name": "decimal-conversion",
+  "owner": {
+    "name": "unsafePtr"
+  },
+  "description": "Roslyn analyzers, code fixes and a Claude Code skill for the .NET 11 floating point to decimal changes.",
+  "plugins": [
+    {
+      "name": "dotnet11-floating-point",
+      "source": "./claude-plugin",
+      "description": "Migrates C# code to the .NET 11 double and float to decimal conversion and rounding changes with the DecimalConversion analyzer and dotnet format."
+    }
+  ]
+}

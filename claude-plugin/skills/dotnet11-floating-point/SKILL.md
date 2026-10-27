@@ -26,13 +26,18 @@ Copy aside the files the migration changes and later puts back, starting with `.
 mkdir -p .dcv/backup && cp --parents .editorconfig Directory.Build.props .dcv/backup/
 ```
 
-Add the package to `Directory.Build.props`:
+Add the package to `Directory.Build.props`, restored from the copy this skill carries:
 
 ```xml
+<PropertyGroup>
+  <RestoreAdditionalProjectSources>${CLAUDE_SKILL_DIR}/packages</RestoreAdditionalProjectSources>
+</PropertyGroup>
 <ItemGroup>
   <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.0" PrivateAssets="all" />
 </ItemGroup>
 ```
+
+Under central package management, where `Directory.Packages.props` sets `ManagePackageVersionsCentrally`, write `VersionOverride="1.3.0"` instead of `Version`.
 
 ## 2. List the sites
 
