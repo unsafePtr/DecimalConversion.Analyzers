@@ -78,6 +78,7 @@ A netstandard2.0 project cannot host the helper, since it lacks `double.TryForma
 
 ## Develop
 
-Run the tests with `dotnet run --project tests/DecimalConversion.Tests`.
+Building needs the .NET 11 SDK that `global.json` pins, and the .NET 10 runtime for the net10.0 tests.
+Run the tests with `dotnet run --project tests/DecimalConversion.Tests -f net10.0`, and again with `-f net11.0`.
 `claude --plugin-dir ./claude-plugin` loads the plugin from a checkout for one session.
 `dotnet pack src/DecimalConversion.CodeFixes -c Release` refreshes the package the plugin carries; a new version also goes into the skill and `plugin.json`.
