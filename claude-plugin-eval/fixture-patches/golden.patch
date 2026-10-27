@@ -1,5 +1,55 @@
+diff --git a/src/Desk.Core/Analytics/FillStats.cs b/src/Desk.Core/Analytics/FillStats.cs
+index a36d442..459241e 100644
+--- a/src/Desk.Core/Analytics/FillStats.cs
++++ b/src/Desk.Core/Analytics/FillStats.cs
+@@ -2,5 +2,7 @@ namespace Desk.Analytics;
+ 
+ public static class FillStats
+ {
++#pragma warning disable DCV001 // computed ratio, rounded to nearest
+     public static decimal FillPercent(double filled, double requested) => decimal.Round((decimal)(filled / requested) * 100m, 1);
++#pragma warning restore DCV001
+ }
+diff --git a/src/Desk.Core/Analytics/Ranking.cs b/src/Desk.Core/Analytics/Ranking.cs
+index 951fa2a..eddea87 100644
+--- a/src/Desk.Core/Analytics/Ranking.cs
++++ b/src/Desk.Core/Analytics/Ranking.cs
+@@ -2,6 +2,8 @@ namespace Desk.Analytics;
+ 
+ public static class Ranking
+ {
++#pragma warning disable DCV001 // used only to order the scores
+     public static IReadOnlyList<string> ByScore(IReadOnlyDictionary<string, double> scores) =>
+         [.. scores.OrderByDescending(s => (decimal)s.Value).Select(s => s.Key)];
++#pragma warning restore DCV001
+ }
+diff --git a/src/Desk.Core/Analytics/Volatility.cs b/src/Desk.Core/Analytics/Volatility.cs
+index 07163ec..f6ab25a 100644
+--- a/src/Desk.Core/Analytics/Volatility.cs
++++ b/src/Desk.Core/Analytics/Volatility.cs
+@@ -7,6 +7,8 @@ public static class Volatility
+         var mean = dailyReturns.Average();
+         var variance = dailyReturns.Sum(r => (r - mean) * (r - mean)) / (dailyReturns.Count - 1);
+         var stdDev = Math.Sqrt(variance);
++#pragma warning disable DCV001 // computed volatility, rounded to nearest
+         return decimal.Round((decimal)(stdDev * Math.Sqrt(365)), 4);
++#pragma warning restore DCV001
+     }
+ }
+diff --git a/src/Desk.Core/Diagnostics/LatencyLog.cs b/src/Desk.Core/Diagnostics/LatencyLog.cs
+index e6f75d9..6f3e50d 100644
+--- a/src/Desk.Core/Diagnostics/LatencyLog.cs
++++ b/src/Desk.Core/Diagnostics/LatencyLog.cs
+@@ -2,5 +2,7 @@ namespace Desk.Diagnostics;
+ 
+ public static class LatencyLog
+ {
++#pragma warning disable DCV001 // displayed with a fixed format
+     public static string Line(string stage, double ms) => FormattableString.Invariant($"{stage} latency {(decimal)ms:F2} ms");
++#pragma warning restore DCV001
+ }
 diff --git a/src/Desk.Core/Fees/FeeSchedule.cs b/src/Desk.Core/Fees/FeeSchedule.cs
-index 8593cb2..c67d06d 100644
+index 8593cb2..c0744c2 100644
 --- a/src/Desk.Core/Fees/FeeSchedule.cs
 +++ b/src/Desk.Core/Fees/FeeSchedule.cs
 @@ -2,9 +2,9 @@ namespace Desk.Fees;
@@ -12,14 +62,14 @@ index 8593cb2..c67d06d 100644
      public static decimal TakerFee(decimal notional) => notional * TakerRate;
  
 -    public static decimal RoundToCents(decimal amount) => (decimal)Math.Round((double)amount, 2);
-+    public static decimal RoundToCents(decimal amount) => decimal.Round(amount, 2);
++    public static decimal RoundToCents(decimal amount) => FloatingPoint.Normalize(Math.Round(amount, 2));
  }
 diff --git a/src/Desk.Core/FloatingPoint.cs b/src/Desk.Core/FloatingPoint.cs
 new file mode 100644
-index 0000000..0c6ec77
+index 0000000..db68796
 --- /dev/null
 +++ b/src/Desk.Core/FloatingPoint.cs
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,33 @@
 +using System.Globalization;
 +
 +namespace Desk;
@@ -32,6 +82,13 @@ index 0000000..0c6ec77
 +/// </remarks>
 +public static class FloatingPoint
 +{
++    public static decimal Normalize(decimal value)
++    {
++        Span<char> text = stackalloc char[40];
++        value.TryFormat(text, out var length, "G29", CultureInfo.InvariantCulture);
++        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
++    }
++
 +    public static decimal ToDecimal(double value)
 +    {
 +        Span<char> text = stackalloc char[32];
@@ -46,6 +103,17 @@ index 0000000..0c6ec77
 +        return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
 +    }
 +}
+diff --git a/src/Desk.Core/Invoices/LineTotal.cs b/src/Desk.Core/Invoices/LineTotal.cs
+index 6b1d7bf..34bfca4 100644
+--- a/src/Desk.Core/Invoices/LineTotal.cs
++++ b/src/Desk.Core/Invoices/LineTotal.cs
+@@ -2,5 +2,5 @@ namespace Desk.Invoices;
+ 
+ public static class LineTotal
+ {
+-    public static double ToCents(double amount) => Math.Round(amount, 2, MidpointRounding.AwayFromZero);
++    public static double ToCents(double amount) => (double)decimal.Round(FloatingPoint.ToDecimal(amount), 2, MidpointRounding.AwayFromZero);
+ }
 diff --git a/src/Desk.Core/Orders/LotSizer.cs b/src/Desk.Core/Orders/LotSizer.cs
 index 8d87257..18c9728 100644
 --- a/src/Desk.Core/Orders/LotSizer.cs
@@ -67,6 +135,20 @@ index 910f6a8..3360a86 100644
      public static string Limit(string symbol, bool buy, double qty, double price) =>
 -        FormattableString.Invariant($"{(buy ? "BUY" : "SELL")} {symbol} qty={(decimal)qty} px={(decimal)price}");
 +        FormattableString.Invariant($"{(buy ? "BUY" : "SELL")} {symbol} qty={FloatingPoint.ToDecimal(qty)} px={FloatingPoint.ToDecimal(price)}");
+ }
+diff --git a/src/Desk.Core/Pricing/MidPrice.cs b/src/Desk.Core/Pricing/MidPrice.cs
+index 68ec5f9..f9ec68e 100644
+--- a/src/Desk.Core/Pricing/MidPrice.cs
++++ b/src/Desk.Core/Pricing/MidPrice.cs
+@@ -2,7 +2,9 @@ namespace Desk.Pricing;
+ 
+ public static class MidPrice
+ {
++#pragma warning disable DCV004 // computed mid and spread, rounded to nearest
+     public static double Mid(double bid, double ask) => Math.Round((bid + ask) / 2, 8);
+ 
+     public static double SpreadBps(double bid, double ask) => Math.Round((ask - bid) / Mid(bid, ask) * 10_000, 2, MidpointRounding.AwayFromZero);
++#pragma warning restore DCV004
  }
 diff --git a/src/Desk.Core/Pricing/PriceRounding.cs b/src/Desk.Core/Pricing/PriceRounding.cs
 index 43aad91..4892475 100644
@@ -114,4 +196,16 @@ index 0085296..5631149 100644
  {
 -    public static bool CanSell(double available, decimal required) => (decimal)available >= required;
 +    public static bool CanSell(double available, decimal required) => FloatingPoint.ToDecimal(available) >= required;
+ }
+diff --git a/src/Desk.Core/Time/Buckets.cs b/src/Desk.Core/Time/Buckets.cs
+index 16bf5c8..f57f124 100644
+--- a/src/Desk.Core/Time/Buckets.cs
++++ b/src/Desk.Core/Time/Buckets.cs
+@@ -2,5 +2,7 @@ namespace Desk.Time;
+ 
+ public static class Buckets
+ {
++#pragma warning disable DCV001 // a whole number of minutes converts exactly
+     public static decimal MinuteStart(double seconds) => (decimal)Math.Floor(seconds / 60) * 60m;
++#pragma warning restore DCV001
  }

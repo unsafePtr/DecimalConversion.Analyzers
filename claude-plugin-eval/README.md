@@ -14,33 +14,37 @@ The suite is kept apart from the plugin so that an agent using the skill cannot 
 
 Scores are with the skill against without it.
 Both arms fixed every site .NET 11 breaks; without the skill the agent also rewrote harmless casts in 8 of 9 runs.
+That run predates the analyzer in the fixture's build and the invoice site, with 27 tests per framework.
 
 ## The fixture
 
 `fixture/` is a small solution, `Desk.Core` with `Desk.Tests` on net10.0 and net11.0, built with the .NET 11 SDK.
-Its call sites fall into two groups:
+Its `Directory.Build.props` references the DecimalConversion analyzer, so `dotnet build` reports every site below as a warning in both arms, as in a team that has installed the package.
+`tools/pack-fixture.sh` packs the analyzer from `../src` into a feed inside each workspace, so a run always builds with the current analyzer and needs no network for it.
+The call sites fall into two groups:
 
-| Site | File | Should be | Covered by a test |
-|---|---|---|---|
-| floor of a parsed size to a lot step | `Orders/LotSizer.cs` | changed | yes |
-| quantity and price in order text | `Orders/OrderText.cs` | changed | no |
-| balance compared with a decimal requirement | `Risk/BalanceCheck.cs` | changed | no |
-| bid and ask rounded down and up to the tick | `Pricing/PriceRounding.cs` | changed | yes |
-| fee rate written as a constant cast | `Fees/FeeSchedule.cs` | changed | yes |
-| cents rounded through a double | `Fees/FeeSchedule.cs` | changed | yes |
-| decimal places of a tick size | `Pricing/TickInfo.cs` | changed | yes |
-| notional of two parsed doubles rounded to cents | `Reports/PnlReport.cs` | changed | yes |
-| annualised volatility rounded to 4 places | `Analytics/Volatility.cs` | kept | yes |
-| fill percentage rounded to 1 place | `Analytics/FillStats.cs` | kept | yes |
-| latency formatted with `F2` | `Diagnostics/LatencyLog.cs` | kept | yes |
-| ordering by score | `Analytics/Ranking.cs` | kept | no |
-| whole minutes from `Math.Floor` | `Time/Buckets.cs` | kept | no |
-| mid price and spread with nearest rounding | `Pricing/MidPrice.cs` | kept | no |
+| Site | File | Warning | Should be | Covered by a test |
+|---|---|---|---|---|
+| floor of a parsed size to a lot step | `Orders/LotSizer.cs` | DCV001 | changed | yes |
+| quantity and price in order text | `Orders/OrderText.cs` | DCV001 | changed | no |
+| balance compared with a decimal requirement | `Risk/BalanceCheck.cs` | DCV001 | changed | no |
+| bid and ask rounded down and up to the tick | `Pricing/PriceRounding.cs` | DCV003 | changed | yes |
+| fee rate written as a constant cast | `Fees/FeeSchedule.cs` | DCV002 | changed | yes |
+| cents rounded through a double | `Fees/FeeSchedule.cs` | DCV005 | changed | yes |
+| decimal places of a tick size | `Pricing/TickInfo.cs` | DCV001 | changed | yes |
+| notional of two parsed doubles rounded to cents | `Reports/PnlReport.cs` | DCV001 | changed | yes |
+| invoice line rounded to cents away from zero | `Invoices/LineTotal.cs` | DCV004 | changed | yes |
+| annualised volatility rounded to 4 places | `Analytics/Volatility.cs` | DCV001 | kept | yes |
+| fill percentage rounded to 1 place | `Analytics/FillStats.cs` | DCV001 | kept | yes |
+| latency formatted with `F2` | `Diagnostics/LatencyLog.cs` | DCV001 | kept | yes |
+| ordering by score | `Analytics/Ranking.cs` | DCV001 | kept | no |
+| whole minutes from `Math.Floor` | `Time/Buckets.cs` | DCV001 | kept | no |
+| mid price and spread with nearest rounding | `Pricing/MidPrice.cs` | DCV004 | kept | no |
 
-Before any fix, 1 of the 27 tests fails on net10.0 (the constant cast, which the SDK 11 compiler folds the new way) and 14 fail on net11.0.
-`fixture-patches/golden.patch` is the reference fix.
-`fixture-patches/blanket.patch` is what the analyzer's code fix produces when run on every site.
-Both pass all 27 tests on both frameworks, so only the graders on the sites themselves tell them apart.
+Before any fix the build reports 18 warnings, 1 of the 30 tests fails on net10.0 (the constant cast, which the SDK 11 compiler folds the new way), and 16 fail on net11.0, among them 655.925 and 2.675 rounded to cents.
+`fixture-patches/golden.patch` is the reference fix: it changes the nine sites and suppresses each kept site's warning with its reason, as the skill asks when the analyzer stays in the build.
+`fixture-patches/blanket.patch` is what `dotnet format analyzers --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005` produces.
+Both pass all 30 tests on both frameworks and leave no warning, so only the graders on the sites themselves tell them apart: the blanket patch fails exactly the six keep graders.
 
 ## Cases
 
@@ -52,9 +56,11 @@ Both pass all 27 tests on both frameworks, so only the graders on the sites them
 | `calibration-golden` | run the tests on the solution with the reference patch, which the scaffold applies | the graders give it a full score |
 | `calibration-blanket` | the same with the helper-everywhere patch | the graders catch every needless rewrite |
 
-Graders read `TestResults/summary.txt`, which `./test.sh` writes from the TRX files of both frameworks along with a check that the test files are unchanged.
+Graders read `TestResults/summary.txt`, which `./test.sh` writes after one `--no-incremental` build: the TRX counters of both frameworks, the number of DCV warnings the build still reports, and whether the test files are unchanged.
+The warning count is there for the analysis and is not graded, since a kept site with its warning left in place is not wrong.
 Regex graders check each site: the two untested sites must no longer hold the raw cast, and each site to keep must still hold its original expression.
-A trace grader fails any run that reads the suite's own files, and an LLM grader judges whether the final report accounts for every site.
+Two trace graders, at half weight, check that the agent ran `./test.sh` and a `dotnet build` or `dotnet format`; another fails any run that reads the suite's own files.
+An LLM grader judges whether the final report accounts for every site; in `no-op`, suppressing a kept site's warning counts as no change.
 
 ## Prerequisites, in WSL2
 
@@ -79,6 +85,8 @@ read -rs token && printf '%s' "$token" > ~/.claude-eval-token && chmod 600 ~/.cl
 The SDKs go outside the home directory because the sandbox cannot read it.
 The fixture's `./dotnet` wrapper keeps the SDK's home, NuGet folders and temp files inside the workspace, the only place the sandbox lets a run write.
 It also turns off Source Link's git queries: each run's workspace sits inside a git repository that `plugin eval` creates and the sandbox hides, so those queries fail the build.
+It runs MSBuild in a single process, because the sandbox stops it from starting a worker node, and a build that asks for one waits five minutes and fails with no error.
+`dotnet build` passes its own `-maxcpucount` after the switches of a `Directory.Build.rsp`, so the wrapper adds `-m:1` to each command that runs MSBuild.
 `run-eval.sh` runs with a plain Linux `PATH`, because the sandbox refuses to start when a `PATH` directory cannot be listed, and WSL adds Windows directories that cannot.
 The sandbox blocks the network, so the build's calls to nuget.org and to the SDK's update check are denied; the scaffold restores beforehand, so they do no harm.
 
@@ -93,8 +101,10 @@ EVAL_ABLATION=none bash claude-plugin-eval/tools/run-eval.sh --case migrate --ru
 `run-eval.sh` packs the fixture into each case's `scaffold.sh` first, since a scaffold starts in an empty workspace and is not told where the case lives.
 The result lands in `evals/results/`, with the score with the plugin, without it, and the difference for each case.
 The runs count against the Claude subscription's usage limits; `--max-cost-usd` caps the list-price estimate the tool reports.
+A run that hits a usage limit ends at its first turn with the limit message as its `error` and scores as if the agent had done nothing, so check `error` in the result before reading the scores.
+`/tmp` in WSL is a tmpfs, and a run kept with `--keep-temp` holds about 220 MB there; once `/tmp` is full every scaffold fails, so delete kept runs after inspecting them, with `chmod -R u+rwx` first since they are sealed read-only.
 
 ## Changing the suite
 
-Edit `fixture/` or `fixture-patches/` and re-run `tools/pack-fixture.sh`.
+Edit `fixture/`, `fixture-patches/` or the analyzer under `../src`; `run-eval.sh` re-runs `tools/pack-fixture.sh` before every run.
 Edit `tools/make-cases.ps1` rather than the generated `prompt.md`, `case.yaml` and grader files, and re-run it.

@@ -1,8 +1,8 @@
-using Verify = DecimalConversion.Tests.Verifier<DecimalConversion.DirectedRoundingAnalyzer, DecimalConversion.FloatingToDecimalCodeFixProvider>;
+using Verify = DecimalConversion.Tests.Verifier<DecimalConversion.RoundingAnalyzer, DecimalConversion.FloatingToDecimalCodeFixProvider>;
 
 namespace DecimalConversion.Tests;
 
-public class DirectedRoundingTests
+public class RoundingTests
 {
     private static readonly (string Name, string Source) DefaultHelper = Verify.HelperFile("DecimalConversion");
 
@@ -214,19 +214,83 @@ public class DirectedRoundingTests
             """);
 
     [Fact]
-    public Task NearestModesZeroDigitsAndDecimals_NotReported() => Verify.VerifyNoDiagnosticAsync(
+    public Task AwayFromZero_NearestRoundingOfTheHelpersDecimal() => Verify.VerifyAsync(
+        """
+        using System;
+
+        class Invoice
+        {
+            double LineTotal(double amount) => {|DCV004:Math.Round(amount, 2, MidpointRounding.AwayFromZero)|};
+        }
+        """,
+        """
+        using System;
+        using DecimalConversion;
+
+        class Invoice
+        {
+            double LineTotal(double amount) => (double)decimal.Round(FloatingPoint.ToDecimal(amount), 2, MidpointRounding.AwayFromZero);
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task NoMode_DecimalRoundWithoutOneEither() => Verify.VerifyAsync(
         """
         using System;
 
         class C
         {
-            double A(double p) => Math.Round(p, 2);
-            double B(double p) => Math.Round(p, 2, MidpointRounding.ToEven);
-            double C2(double p) => Math.Round(p, 2, MidpointRounding.AwayFromZero);
-            double D(double p) => Math.Round(p, 0, MidpointRounding.ToNegativeInfinity);
-            double E(double p) => Math.Round(p, MidpointRounding.ToZero);
-            decimal F(decimal p) => Math.Round(p, 2, MidpointRounding.ToZero);
-            decimal G(decimal p) => decimal.Round(p, 2, MidpointRounding.ToPositiveInfinity);
+            double A(double amount) => {|DCV004:Math.Round(amount, 2)|};
+            double B(double amount, int digits) => {|DCV004:double.Round(amount, digits, MidpointRounding.ToEven)|};
+        }
+        """,
+        """
+        using System;
+        using DecimalConversion;
+
+        class C
+        {
+            double A(double amount) => (double)decimal.Round(FloatingPoint.ToDecimal(amount), 2);
+            double B(double amount, int digits) => (double)decimal.Round(FloatingPoint.ToDecimal(amount), digits, MidpointRounding.ToEven);
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task MathFNearest_CastBackToFloat() => Verify.VerifyAsync(
+        """
+        using System;
+
+        class C
+        {
+            float M(float amount) => {|DCV004:MathF.Round(amount, 1)|};
+        }
+        """,
+        """
+        using System;
+        using DecimalConversion;
+
+        class C
+        {
+            float M(float amount) => (float)decimal.Round(FloatingPoint.ToDecimal(amount), 1);
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task ZeroDigitsWholeNumberRoundsAndDecimals_NotReported() => Verify.VerifyNoDiagnosticAsync(
+        """
+        using System;
+
+        class C
+        {
+            double A(double p) => Math.Round(p, 0, MidpointRounding.ToNegativeInfinity);
+            double B(double p) => Math.Round(p, 0);
+            double C2(double p) => Math.Round(p, MidpointRounding.ToZero);
+            double D(double p) => Math.Round(p);
+            decimal E(decimal p) => Math.Round(p, 2, MidpointRounding.ToZero);
+            decimal F(decimal p) => decimal.Round(p, 2, MidpointRounding.AwayFromZero);
         }
         """);
 }

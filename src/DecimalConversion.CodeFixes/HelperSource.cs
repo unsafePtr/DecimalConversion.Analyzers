@@ -21,6 +21,19 @@ internal static class HelperSource
             /// </remarks>
             {{accessibility}} static class {{helper.Type}}
             {
+                /// <summary>
+                /// The value without trailing zeros, as a decimal sent through a double came back: 1.20 becomes 1.2.
+                /// </summary>
+                /// <remarks>
+                /// The same recipe on a decimal: the general format with a precision omits trailing zeros, and G29 keeps every digit a decimal holds.
+                /// </remarks>
+                public static decimal {{HelperOption.NormalizeMethod}}(decimal value)
+                {
+                    global::System.Span<char> text = stackalloc char[40];
+                    value.TryFormat(text, out var length, "G29", global::System.Globalization.CultureInfo.InvariantCulture);
+                    return decimal.Parse(text[..length], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture);
+                }
+
                 public static decimal {{helper.Method}}(double value)
                 {
                     global::System.Span<char> text = stackalloc char[32];

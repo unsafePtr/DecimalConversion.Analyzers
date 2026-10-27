@@ -33,6 +33,19 @@ internal static class Verifier<TAnalyzer, TCodeFix>
         /// </remarks>
         public static class FloatingPoint
         {
+            /// <summary>
+            /// The value without trailing zeros, as a decimal sent through a double came back: 1.20 becomes 1.2.
+            /// </summary>
+            /// <remarks>
+            /// The same recipe on a decimal: the general format with a precision omits trailing zeros, and G29 keeps every digit a decimal holds.
+            /// </remarks>
+            public static decimal Normalize(decimal value)
+            {
+                Span<char> text = stackalloc char[40];
+                value.TryFormat(text, out var length, "G29", CultureInfo.InvariantCulture);
+                return decimal.Parse(text[..length], NumberStyles.Float, CultureInfo.InvariantCulture);
+            }
+
             public static decimal ToDecimal(double value)
             {
                 Span<char> text = stackalloc char[32];
@@ -50,18 +63,26 @@ internal static class Verifier<TAnalyzer, TCodeFix>
 
         """);
 
-    public static Task VerifyAsync(string source, string fixedSource, (string Name, string Source)? addedSource = null, string? editorConfig = null) =>
-        VerifyAsync([source], [fixedSource], editorConfig, addedSource);
+    public static Task VerifyAsync(string source, string fixedSource, (string Name, string Source)? addedSource = null, string? editorConfig = null, string? codeAction = null) =>
+        VerifyAsync([source], [fixedSource], editorConfig, addedSource, codeAction);
 
     /// <summary>
     /// Fixes <paramref name="sources"/> as one project; <paramref name="addedSource"/> is the file the fix is expected to add.
     /// </summary>
-    public static Task VerifyAsync(string[] sources, string[] fixedSources, string? editorConfig, (string Name, string Source)? addedSource = null)
+    /// <remarks>
+    /// <paramref name="codeAction"/> picks a code action by equivalence key where a diagnostic offers more than one; the first one is used otherwise.
+    /// </remarks>
+    public static Task VerifyAsync(string[] sources, string[] fixedSources, string? editorConfig, (string Name, string Source)? addedSource = null, string? codeAction = null)
     {
         var test = CreateTest(sources, fixedSources, editorConfig);
         if (addedSource is { } added)
         {
             test.FixedState.Sources.Add(added);
+        }
+
+        if (codeAction is not null)
+        {
+            test.CodeActionEquivalenceKey = codeAction;
         }
 
         return test.RunAsync(TestContext.Current.CancellationToken);

@@ -9,7 +9,7 @@ namespace DecimalConversion;
 
 /// <summary>
 /// Reports every conversion of a double or float to decimal that the runtime performs: an explicit cast, <c>Convert.ToDecimal</c>, the <c>decimal</c> constructor and <c>decimal.CreateChecked</c> with its saturating and truncating forms.
-/// A conversion of a constant is reported as DCV002, which the code fix turns into a decimal literal; the rest as DCV001, which it routes through the configured helper.
+/// A conversion of a constant is reported as DCV002, which the code fix turns into a decimal literal, and a decimal sent through a double and back as DCV005, which the code fix keeps a decimal.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
@@ -21,7 +21,7 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
 
     private static readonly ImmutableDictionary<string, string?> Clamps = ImmutableDictionary<string, string?>.Empty.Add(ClampsProperty, null);
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Descriptors.RuntimeConversion, Descriptors.ConstantConversion];
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } = [Descriptors.RuntimeConversion, Descriptors.ConstantConversion, Descriptors.DecimalRoundTrip];
 
     public override void Initialize(AnalysisContext context)
     {
@@ -60,7 +60,7 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        Report(context, cast, sourceType);
+        Report(context, cast, conversion.Operand, sourceType);
     }
 
     private static void AnalyzeInvocation(OperationAnalysisContext context)
@@ -79,7 +79,7 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        Report(context, invocation.Syntax, method.Parameters[0].Type.ToDisplayString(), method.Name is "CreateSaturating" or "CreateTruncating" ? Clamps : null);
+        Report(context, invocation.Syntax, invocation.Arguments[0].Value, method.Parameters[0].Type.ToDisplayString(), method.Name is "CreateSaturating" or "CreateTruncating" ? Clamps : null);
     }
 
     private static void AnalyzeObjectCreation(OperationAnalysisContext context)
@@ -92,14 +92,21 @@ public sealed class FloatingToDecimalAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        Report(context, creation.Syntax, constructor.Parameters[0].Type.ToDisplayString());
+        Report(context, creation.Syntax, creation.Arguments[0].Value, constructor.Parameters[0].Type.ToDisplayString());
     }
 
-    private static void Report(OperationAnalysisContext context, SyntaxNode node, string sourceType, ImmutableDictionary<string, string?>? properties = null)
+    private static void Report(OperationAnalysisContext context, SyntaxNode node, IOperation operand, string sourceType, ImmutableDictionary<string, string?>? properties = null)
     {
         var helper = HelperOption.Read(context.Options.AnalyzerConfigOptionsProvider, node.SyntaxTree);
         if (IsHelper(context.ContainingSymbol, helper))
         {
+            return;
+        }
+
+        if (!RoundTrip.InnerConversions(operand).IsEmpty)
+        {
+            var normalize = helper.Type.Length > 0 ? helper.Type + "." + HelperOption.NormalizeMethod : HelperOption.NormalizeMethod;
+            context.ReportDiagnostic(Diagnostic.Create(Descriptors.DecimalRoundTrip, node.GetLocation(), node.ToString(), normalize));
             return;
         }
 

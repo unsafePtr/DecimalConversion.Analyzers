@@ -28,12 +28,25 @@ public class HelperSourceTests
         Assert.Equal(expected, Helper.Float(value).ToString(CultureInfo.InvariantCulture));
     }
 
+    [Theory]
+    [InlineData("1.20", "1.2")]
+    [InlineData("100.00", "100")]
+    [InlineData("0.00001000", "0.00001")]
+    [InlineData("-7.770", "-7.77")]
+    [InlineData("79228162514264337593543950335", "79228162514264337593543950335")]
+    public void Normalize_DropsTrailingZerosAndKeepsTheValue(string value, string expected)
+    {
+        Assert.Equal(expected, Helper.Normalize(decimal.Parse(value, CultureInfo.InvariantCulture)).ToString(CultureInfo.InvariantCulture));
+    }
+
     /// <summary>The helper's source under the default name, compiled and loaded once.</summary>
     private static class Helper
     {
         public static readonly Func<double, decimal> Double;
 
         public static readonly Func<float, decimal> Float;
+
+        public static readonly Func<decimal, decimal> Normalize;
 
         static Helper()
         {
@@ -48,6 +61,7 @@ public class HelperSourceTests
             var type = Assembly.Load(image.ToArray()).GetType("DecimalConversion.FloatingPoint", throwOnError: true)!;
             Double = type.GetMethod("ToDecimal", [typeof(double)])!.CreateDelegate<Func<double, decimal>>();
             Float = type.GetMethod("ToDecimal", [typeof(float)])!.CreateDelegate<Func<float, decimal>>();
+            Normalize = type.GetMethod("Normalize", [typeof(decimal)])!.CreateDelegate<Func<decimal, decimal>>();
         }
     }
 }

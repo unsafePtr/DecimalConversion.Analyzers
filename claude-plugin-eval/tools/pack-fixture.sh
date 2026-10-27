@@ -6,6 +6,12 @@ set -euo pipefail
 suite="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture="$suite/fixture"
 
+# The fixture references the analyzer from a feed inside the workspace, so every run builds with the current analyzer and needs no network for it.
+# Packing under a temporary artifacts path keeps this build's obj and bin apart from the ones a Windows build uses in the same source tree.
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+dotnet pack "$suite/../src/DecimalConversion.CodeFixes" -c Release --artifacts-path "$work/artifacts" -o "$work/feed" -v:q > "$work/pack.log" 2>&1 || { cat "$work/pack.log"; exit 1; }
+
 common=(global.json nuget.config Desk.slnx Directory.Build.props .editorconfig .gitignore dotnet test.sh src/Desk.Core/Desk.Core.csproj src/Desk.Core/Quote.cs tests/Desk.Tests/Desk.Tests.csproj)
 harmless=(src/Desk.Core/Analytics src/Desk.Core/Diagnostics src/Desk.Core/Time src/Desk.Core/Pricing/MidPrice.cs tests/Desk.Tests/AnalyticsTests.cs tests/Desk.Tests/DiagnosticsTests.cs)
 
@@ -14,10 +20,12 @@ pack() {
     local case_dir="$suite/evals/$1" variant="$2" patch="${3:-}" stage
     stage="$(mktemp -d)"
     if [[ $variant == full ]]; then
-        tar -C "$fixture" -c --exclude=bin --exclude=obj --exclude=.packages --exclude=TestResults --exclude=.dotnet-home --exclude=.tmp . | tar -x -C "$stage"
+        tar -C "$fixture" -c --exclude=bin --exclude=obj --exclude=.packages --exclude=.nuget-feed --exclude=TestResults --exclude=.dotnet-home --exclude=.tmp . | tar -x -C "$stage"
     else
         tar -C "$fixture" -c "${common[@]}" "${harmless[@]}" | tar -x -C "$stage"
     fi
+    mkdir -p "$stage/.nuget-feed"
+    cp "$work"/feed/*.nupkg "$stage/.nuget-feed/"
 
     mkdir -p "$stage/.eval"
     (cd "$stage" && sha256sum tests/Desk.Tests/*.cs tests/Desk.Tests/Desk.Tests.csproj > .eval/tests.sha256)

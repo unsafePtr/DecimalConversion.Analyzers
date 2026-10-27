@@ -1,6 +1,7 @@
 bin/
 obj/
 .packages/
+.nuget-feed/
 .dotnet-home/
 .tmp/
 TestResults/

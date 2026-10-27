@@ -13,7 +13,7 @@ using Microsoft.CodeAnalysis.Simplification;
 namespace DecimalConversion;
 
 /// <summary>
-/// Rewrites DCV002 to a decimal literal, DCV001 to a call of the configured helper, and DCV003 to <c>decimal.Round</c> of the helper's value.
+/// Rewrites DCV002 to a decimal literal, DCV001 to a call of the configured helper, DCV003 and DCV004 to <c>decimal.Round</c> of the helper's value, and DCV005 to the decimal overload.
 /// The helper's source is added to the solution when the callers cannot see one, so the package can be removed once the fixes are in.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(FloatingToDecimalCodeFixProvider))]
@@ -22,11 +22,14 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
 {
     private static readonly ImmutableArray<FixAllScope> Scopes = [FixAllScope.Document, FixAllScope.Project, FixAllScope.Solution];
 
+    // The DCV005 fix without Normalize, for a value that never becomes text.
+    private const string PlainRoundTripKey = "DCV005.Plain";
+
     // One pass per document, so several fixes in one file add the using directive once.
     private static readonly FixAllProvider DocumentFixAll =
-        FixAllProvider.Create(static async (context, document, diagnostics) => await FixAsync(document, diagnostics, context.CancellationToken).ConfigureAwait(false), Scopes);
+        FixAllProvider.Create(static async (context, document, diagnostics) => await FixAsync(document, diagnostics, context.CodeActionEquivalenceKey, context.CancellationToken).ConfigureAwait(false), Scopes);
 
-    public override ImmutableArray<string> FixableDiagnosticIds { get; } = [Descriptors.RuntimeConversion.Id, Descriptors.ConstantConversion.Id, Descriptors.DirectedRounding.Id];
+    public override ImmutableArray<string> FixableDiagnosticIds { get; } = [Descriptors.RuntimeConversion.Id, Descriptors.ConstantConversion.Id, Descriptors.DirectedRounding.Id, Descriptors.NearestRounding.Id, Descriptors.DecimalRoundTrip.Id];
 
     public override FixAllProvider GetFixAllProvider() => HelperFixAll.Instance;
 
@@ -41,19 +44,26 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
             }
 
             var diagnostics = ImmutableArray.Create(diagnostic);
-            var action = diagnostic.Id == Descriptors.ConstantConversion.Id
-                ? CodeAction.Create("Write as a decimal literal", ct => FixAsync(document, diagnostics, ct), diagnostic.Id)
-                : CodeAction.Create(
-                    diagnostic.Id == Descriptors.DirectedRounding.Id ? "Round as a decimal through the helper" : "Convert through the helper",
-                    async ct => await AddMissingHelpersAsync(document.Project.Solution, (await FixAsync(document, diagnostics, ct).ConfigureAwait(false)).Project.Solution, ct).ConfigureAwait(false),
-                    diagnostic.Id);
-            context.RegisterCodeFix(action, diagnostic);
+            if (diagnostic.Id == Descriptors.ConstantConversion.Id)
+            {
+                context.RegisterCodeFix(CodeAction.Create("Write as a decimal literal", ct => FixAsync(document, diagnostics, diagnostic.Id, ct), diagnostic.Id), diagnostic);
+                continue;
+            }
+
+            var title = diagnostic.Id == Descriptors.DecimalRoundTrip.Id ? "Keep it a decimal, without the trailing zeros the double dropped" : IsRounding(diagnostic) ? "Round as a decimal through the helper" : "Convert through the helper";
+            context.RegisterCodeFix(
+                CodeAction.Create(title, async ct => await AddMissingHelpersAsync(document.Project.Solution, (await FixAsync(document, diagnostics, diagnostic.Id, ct).ConfigureAwait(false)).Project.Solution, ct).ConfigureAwait(false), diagnostic.Id),
+                diagnostic);
+            if (diagnostic.Id == Descriptors.DecimalRoundTrip.Id)
+            {
+                context.RegisterCodeFix(CodeAction.Create("Keep it a decimal", ct => FixAsync(document, diagnostics, PlainRoundTripKey, ct), PlainRoundTripKey), diagnostic);
+            }
         }
 
         return Task.CompletedTask;
     }
 
-    private static async Task<Document> FixAsync(Document document, ImmutableArray<Diagnostic> diagnostics, CancellationToken cancellationToken)
+    private static async Task<Document> FixAsync(Document document, ImmutableArray<Diagnostic> diagnostics, string? equivalenceKey, CancellationToken cancellationToken)
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         var model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
@@ -83,7 +93,20 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            if (diagnostic.Id == Descriptors.DirectedRounding.Id)
+            if (diagnostic.Id == Descriptors.DecimalRoundTrip.Id)
+            {
+                if (KeptDecimal(model.GetOperation(node, cancellationToken)) is { } kept)
+                {
+                    var normalize = equivalenceKey != PlainRoundTripKey && CanNormalize(model.Compilation, helper);
+                    var replacement = normalize ? NormalizeCall(helper, kept) : AsCastOperand(kept);
+                    editor.ReplaceNode(node, replacement.WithTriviaFrom(node));
+                    usesHelper |= normalize && !IsInsideNamespace(node, helper.Namespace);
+                }
+
+                continue;
+            }
+
+            if (IsRounding(diagnostic))
             {
                 if (model.GetOperation(node, cancellationToken) is IInvocationOperation invocation && RoundThroughDecimal(invocation, helper) is { } rounded)
                 {
@@ -231,18 +254,66 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
             SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(operand.WithoutTrivia()))));
 
     /// <summary>
-    /// <c>(double)decimal.Round(Helper(value), digits, mode)</c> for a Round call DCV003 reported, with <c>float</c> for a float, or null when an argument is not written out.
+    /// The decimal expression a DCV005 round trip stands for: the <c>Math</c> call on the decimals, or the decimal itself, with the conversions to double removed.
+    /// </summary>
+    private static ExpressionSyntax? KeptDecimal(IOperation? outer)
+    {
+        var operand = outer switch
+        {
+            IConversionOperation conversion => conversion.Operand,
+            IInvocationOperation { Arguments.Length: 1 } invocation => invocation.Arguments[0].Value,
+            IObjectCreationOperation { Arguments.Length: 1 } creation => creation.Arguments[0].Value,
+            _ => null,
+        };
+        if (operand is null || operand.Syntax is not ExpressionSyntax syntax)
+        {
+            return null;
+        }
+
+        var inner = RoundTrip.InnerConversions(operand);
+        if (inner.IsEmpty)
+        {
+            return null;
+        }
+
+        var sources = inner.ToDictionary(conversion => conversion.Syntax, conversion => (ExpressionSyntax)RoundTrip.Source(conversion).Syntax);
+        if (sources.TryGetValue(syntax, out var whole))
+        {
+            return whole.WithoutTrivia();
+        }
+
+        return syntax.ReplaceNodes(sources.Keys, (original, _) => sources[original].WithTriviaFrom(original)).WithoutTrivia();
+    }
+
+    // A helper type the project already has, such as one an earlier version of this fix wrote, may lack Normalize; one the fix adds has it.
+    private static bool CanNormalize(Compilation compilation, HelperOption helper)
+    {
+        var types = compilation.GetTypesByMetadataName(MetadataName(helper)).Where(t => compilation.IsSymbolAccessibleWithin(t, compilation.Assembly)).ToList();
+        return types.Count == 0
+            || types.Any(t => t.GetMembers(HelperOption.NormalizeMethod).OfType<IMethodSymbol>().Any(m => m.Parameters.Length == 1 && m.Parameters[0].Type.SpecialType == SpecialType.System_Decimal));
+    }
+
+    private static InvocationExpressionSyntax NormalizeCall(HelperOption helper, ExpressionSyntax value) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(helper.Type), SyntaxFactory.IdentifierName(HelperOption.NormalizeMethod)),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(value))));
+
+    private static bool IsRounding(Diagnostic diagnostic) => diagnostic.Id == Descriptors.DirectedRounding.Id || diagnostic.Id == Descriptors.NearestRounding.Id;
+
+    /// <summary>
+    /// <c>(double)decimal.Round(Helper(value), digits[, mode])</c> for a Round call DCV003 or DCV004 reported, with <c>float</c> for a float, or null when an argument is not written out.
     /// </summary>
     /// <remarks>
     /// A value widened to the double overload is cast to double first, so the helper rounds the double that Round saw.
+    /// A call without a mode keeps none, since <c>decimal.Round</c> also defaults to ToEven.
     /// The rounded decimal keeps at most 15 significant digits, so for up to 22 digits the cast back gives the same double on .NET 10 and .NET 11.
     /// </remarks>
     private static ExpressionSyntax? RoundThroughDecimal(IInvocationOperation invocation, HelperOption helper)
     {
-        if (!DirectedRoundingAnalyzer.TryMatch(invocation, out var value, out var digits, out var mode)
+        if (!RoundingAnalyzer.TryMatch(invocation, out var value, out var digits, out var mode)
             || value.Syntax is not ArgumentSyntax valueArgument
             || digits.Syntax is not ArgumentSyntax digitsArgument
-            || mode.Syntax is not ArgumentSyntax modeArgument)
+            || mode is { Syntax: not ArgumentSyntax })
         {
             return null;
         }
@@ -255,11 +326,15 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
         }
 
         var comma = SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space);
+        List<ArgumentSyntax> arguments = [SyntaxFactory.Argument(HelperCall(helper, operand)), SyntaxFactory.Argument(digitsArgument.Expression.WithoutTrivia())];
+        if (mode?.Syntax is ArgumentSyntax modeArgument)
+        {
+            arguments.Add(SyntaxFactory.Argument(modeArgument.Expression.WithoutTrivia()));
+        }
+
         var round = SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.DecimalKeyword)), SyntaxFactory.IdentifierName("Round")),
-            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(
-                [SyntaxFactory.Argument(HelperCall(helper, operand)), SyntaxFactory.Argument(digitsArgument.Expression.WithoutTrivia()), SyntaxFactory.Argument(modeArgument.Expression.WithoutTrivia())],
-                [comma, comma])));
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments, Enumerable.Repeat(comma, arguments.Count - 1))));
         ExpressionSyntax cast = SyntaxFactory.CastExpression(type, round);
         return NeedsParentheses(invocation.Syntax) ? SyntaxFactory.ParenthesizedExpression(cast) : cast;
     }
@@ -363,7 +438,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
         public override async Task<CodeAction?> GetFixAsync(FixAllContext fixAllContext)
         {
             var fix = await DocumentFixAll.GetFixAsync(fixAllContext).ConfigureAwait(false);
-            if (fix is null || fixAllContext.CodeActionEquivalenceKey == Descriptors.ConstantConversion.Id)
+            if (fix is null || fixAllContext.CodeActionEquivalenceKey is { } key && (key == Descriptors.ConstantConversion.Id || key == PlainRoundTripKey))
             {
                 return fix;
             }

@@ -40,6 +40,8 @@ function Common-Graders([string] $case, [int] $total, [bool] $full, [bool] $agen
 
     Write-Lf "$g\ran-tests.md" "---`ntype: tool_used`nweight: 0.5`narm: both`ntool: Bash`ninput_match: 'test\.sh'`nmin: 1`n---`n"
     if ($agentGraders) {
+        # Whether the agent asked the build for the sites, as the skill says, rather than only searching the code.
+        Write-Lf "$g\ran-build.md" "---`ntype: tool_used`nweight: 0.5`narm: both`ntool: Bash`ninput_match: 'dotnet (build|format)'`nmin: 1`n---`n"
         Write-Lf "$g\no-peek.md" "---`ntype: regex`nweight: 1`ntarget: trace`npattern: 'claude-plugin-eval|fixture-patches|golden\.patch|blanket\.patch|/graders/'`nmatch: not_contains`n---`n"
     }
 }
@@ -57,22 +59,22 @@ $migrate = "This solution is moving to .NET 11.`nIts test project already target
 $symptom = "We moved our order service to .NET 11 and two things broke.`nThe venue now refuses some orders with ``qty=0.0002999999999999999737189393: too many decimals``, and some passive bids rest one tick below the price we meant.`nThe solution is in this folder, and its tests target net10.0 and net11.0.`nFind the cause and fix it everywhere it applies, without touching code that is fine.`n$tooling`nFinish with what you changed, and what you checked and left alone."
 
 Case 'migrate' 'Open-ended .NET 11 migration of a solution with sensitive and harmless conversions' 'core' 3 $migrate
-Common-Graders 'migrate' 27 $true $true
+Common-Graders 'migrate' 30 $true $true
 Write-Lf "$evals\migrate\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it lists the double-to-decimal conversions and roundings it changed, with how, and separately names the ones it left unchanged, with a reason for each.`nFAIL if it does not mention any unchanged conversion, or gives no reason for leaving them.`n"
 
 Case 'symptom' 'Bug report from a .NET 11 rollout: refused quantities and bids a tick low' 'core' 3 $symptom
-Common-Graders 'symptom' 27 $true $true
+Common-Graders 'symptom' 30 $true $true
 Write-Lf "$evals\symptom\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it explains the cause of both symptoms, says what was changed and how, and names conversions it checked and left unchanged, with a reason for each.`nFAIL if it does not mention looking beyond the two symptoms, or names no conversion it left unchanged.`n"
 
 Case 'no-op' 'The migration prompt on a solution whose conversions are all harmless' 'core' 3 $migrate
 Common-Graders 'no-op' 6 $false $true
 Write-Lf "$evals\no-op\graders\no-new-source.md" "---`ntype: regex`nweight: 1`ntarget: files`npattern: 'src/Desk\.Core/(?!obj/|bin/)\S*\.cs'`nmatch: not_contains`n---`n"
-Write-Lf "$evals\no-op\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it concludes that no source change is needed for .NET 11, or that the only differences are in display values or statistics that nothing depends on, and it names the conversions it checked.`nFAIL if it reports changing source code to route conversions through a helper.`n"
+Write-Lf "$evals\no-op\graders\report.md" "---`ntype: llm`nweight: 1`n---`n`nJudge the final message on its own; you cannot see the code or the conversation, so do not try to verify its claims.`nPASS if it concludes that no conversion or rounding needs to change for .NET 11, or that the only differences are in display values or statistics that nothing depends on, and it names the conversions it checked; suppressing the analyzer's warnings with a reason counts as no change.`nFAIL if it reports routing conversions or roundings through a helper.`n"
 
 # The scaffold applies the patch, so the agent only runs the tests and the graders see the patched solution.
 $calibration = "Run ``./test.sh`` and reply with the content of TestResults/summary.txt.`nDo not change any file."
 Case 'calibration-golden' 'The reference fix, applied by the scaffold, to check the graders score it fully' 'calibration' 1 $calibration
-Common-Graders 'calibration-golden' 27 $true $false
+Common-Graders 'calibration-golden' 30 $true $false
 Case 'calibration-blanket' 'The helper-everywhere fix, applied by the scaffold, to check the keep graders catch it' 'calibration' 1 $calibration
-Common-Graders 'calibration-blanket' 27 $true $false
+Common-Graders 'calibration-blanket' 30 $true $false
 

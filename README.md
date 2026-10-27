@@ -11,6 +11,8 @@ There is no compatibility switch: [breaking change](https://learn.microsoft.com/
 | DCV001 | A cast, `Convert.ToDecimal`, `new decimal(...)` or `decimal.CreateChecked` from a double or float | Calls the helper |
 | DCV002 | A double or float constant cast to decimal | Writes the decimal literal with the old rounding |
 | DCV003 | `Math.Round`, `MathF.Round`, `double.Round` or `float.Round` to some digits with a directed mode | Rounds the helper's decimal |
+| DCV004 | The same with a nearest mode, `ToEven`, `AwayFromZero` or none | Rounds the helper's decimal |
+| DCV005 | A decimal sent through a double and back, such as `(decimal)Math.Round((double)amount, 2)` | Uses the decimal overload |
 
 DCV001 also reports `decimal.CreateSaturating` and `CreateTruncating`, without a fix: they clamp a value outside decimal's range and turn NaN into zero, where the helper throws.
 
@@ -45,15 +47,40 @@ With `ToNegativeInfinity`, `ToPositiveInfinity` or `ToZero`, 40 to 50 percent of
 DCV003 rewrites the call to `(double)decimal.Round(FloatingPoint.ToDecimal(price), digits, mode)`, which moves none on either runtime.
 That changes the .NET 10 result too, for the prices .NET 10 already moved.
 A mode chosen at run time is reported as well.
-`ToEven`, `AwayFromZero` and zero digits are not, since a value on the grid stays where it is.
+
+DCV004 reports the nearest modes.
+They leave a value on the grid where it is, but a value written halfway between two steps can round the other way.
+`Math.Round(655.925, 2, MidpointRounding.AwayFromZero)` gives 655.93 on .NET 10 and 655.92 on .NET 11, and 655.93 on both through the helper.
+For three-decimal values rounded to cents, about half of the midpoints come out wrong on .NET 11, against 6 percent on .NET 10, and none through the helper.
+Keep the `Math.Round` of a computed value: the decimal route throws on NaN, infinity and values beyond decimal's range, where `Math.Round` returns them.
+Zero digits is reported by neither rule, since it is `Floor`, `Ceiling`, `Truncate` or a whole-number round, which did not change.
+
+## Round trips
+
+A decimal sent through a double was already wrong on .NET 10, and .NET 11 adds a binary tail on top:
+
+| Amount | `(decimal)Math.Round((double)amount, 2)` on .NET 10 | on .NET 11 | `Math.Round(amount, 2)` |
+|---|---|---|---|
+| 1.015 | 1.01 | 1.0100000000000000088817841970 | 1.02 |
+| 1.20 | 1.2 | 1.1999999999999999555910790150 | 1.20 |
+| 12345678901234.567 | 12345678901234.6 | 12345678901234.5703125 | 12345678901234.57 |
+
+DCV005 reports the cast to decimal of a decimal converted to double, directly or through `Math.Round`, `Floor`, `Ceiling`, `Truncate`, `Abs`, `Min` or `Max`, each of which has a decimal overload.
+Any double arithmetic on the way, such as `* 1.1`, makes it an ordinary DCV001.
+The trip through double also dropped trailing zeros, so 1.20 printed as 1.2, and that may be why the code was written that way.
+The default fix keeps that text form with `FloatingPoint.Normalize(Math.Round(amount, 2))`, which formats with `G29` and parses back: the general format with a precision omits trailing zeros, and 29 digits hold any decimal.
+.NET has no method of its own for this.
+The second fix, `Math.Round(amount, 2)` alone, suits a value that never becomes text.
+A helper type the code already has without `Normalize` gets the second form.
 
 ## Use
 
 1. Reference the `DecimalConversion.Analyzer` package from every project to fix, or build it with `dotnet pack src/DecimalConversion.CodeFixes -c Release -o artifacts`.
-2. Fix the whole solution in one run, since fixing one project puts the helper there: `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003`.
-3. Delete the `<Compile Include="FloatingPoint.cs" />` line `dotnet format` adds with each helper; the SDK already compiles the file (NETSDK1022).
-4. Check that the build reports no DCV001, DCV002 or DCV003 other than `CreateSaturating` and `CreateTruncating`, the tests pass, and a search finds none of the unreported conversions above.
-5. Remove the package, or keep it to catch new conversions; as a development dependency it does not flow to projects that reference yours.
+2. Run `dotnet build --no-incremental`: every DCV warning is a site, found by the compiler rather than by a text search.
+3. Decide per site, since many need no change; the skill in [claude-plugin](claude-plugin) is that triage.
+4. To fix every site at once instead, run `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005` over the whole solution, since fixing one project puts the helper there, and delete the `<Compile Include="FloatingPoint.cs" />` line it adds with each helper (NETSDK1022).
+5. Check that the build reports no DCV warning you have not decided on, the tests pass, and a search finds none of the unreported conversions above.
+6. Remove the package, or keep it to catch new conversions; as a development dependency it does not flow to projects that reference yours. If you keep it, suppress each site you decided to leave with `#pragma warning disable` and its reason.
 
 ## Skill
 

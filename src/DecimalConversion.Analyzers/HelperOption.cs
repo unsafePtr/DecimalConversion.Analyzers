@@ -12,6 +12,11 @@ internal readonly struct HelperOption
     public const string Key = "decimal_conversion_helper";
     public const string Default = "DecimalConversion.FloatingPoint.ToDecimal";
 
+    /// <summary>
+    /// The helper type's method that drops a decimal's trailing zeros, which the DCV005 fix calls next to the configured conversion method.
+    /// </summary>
+    public const string NormalizeMethod = "Normalize";
+
     public HelperOption(string fullName)
     {
         var lastDot = fullName.LastIndexOf('.');
