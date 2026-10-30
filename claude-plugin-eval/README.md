@@ -2,7 +2,8 @@
 
 This suite measures whether the skill in [../claude-plugin](../claude-plugin) makes an agent migrate code to .NET 11 better than the same agent without it.
 "Better" means fixing the sites .NET 11 breaks while leaving the plain cast where nothing depends on the last digits, instead of routing every conversion through a helper.
-It also means the way there: the analyzer lists the sites and `dotnet format` applies its fix, with no search of the code, no site rewritten by hand, and nothing left behind but the fixes and the helper.
+It also means the way there: the analyzer lists the sites and `dotnet format` applies its fix, with no search of the code, no site rewritten by hand that the fix can rewrite, and nothing left behind but the fixes and the helper.
+Only the skill prescribes that way, so it is checked in the skill arm alone and reported apart from the score, which both arms earn from the same outcome graders.
 It runs with `claude plugin eval`, which plays each case once with the plugin and once without any plugin and reports both scores and the difference.
 
 The suite is kept apart from the plugin so that an agent using the skill cannot browse from the skill's folder into the graders or the reference patch.
@@ -17,6 +18,8 @@ The suite is kept apart from the plugin so that an agent using the skill cannot 
 | Sonnet 5.5, 2026-10-28, package 1.3.2 and the hourly-interest site | 0.99 vs 0.72 | 0.99 vs 0.90 | 0.98 vs 0.67 | 0.98 vs 0.91 | [analysis](results/2026-10-28-sonnet-5.5.md) |
 
 Scores are with the skill against without it; the second run's leave out a grader that was removed after it, as its analysis explains.
+Until 2026-10-28 the scores also counted the trace graders, which the baseline could not pass, since it is never told the analyzer exists; from the next run on they apply to the skill arm only and are not scored.
+Scored on the outcome graders alone, the 2026-10-28 run gives `migrate` 1.00 vs 0.75, `migrate-full` 1.00 vs 1.00, `no-op` 1.00 vs 0.63 and `symptom` 1.00 vs 0.98.
 Both arms fixed every site .NET 11 breaks, and both converted every site when `migrate-full` asked for it.
 Without the skill the agent also rewrote harmless casts when asked to change only what needs to change, in 8 of 9 runs of the first run, and 7 of 9 of each run since.
 In the third and the fourth, the skill arm applied every fix with `dotnet format`, kept every harmless cast and put the build files back byte for byte, and the baseline never used the analyzer.
@@ -36,6 +39,9 @@ The call sites fall into two groups, with the warning the analyzer reports for e
 | quantity and price in order text | `Orders/OrderText.cs` | DCV001 | changed | no |
 | balance compared with a decimal requirement | `Risk/BalanceCheck.cs` | DCV001 | changed | no |
 | bid and ask rounded down and up to the tick | `Pricing/PriceRounding.cs` | DCV003 | changed | yes |
+| a generic price rounded down through `T.Round`, which gets no fix | `Pricing/GridRounding.cs` | DCV003 | changed | yes |
+| bid levels rounded down through `Math.Round` passed as a delegate | `Pricing/BidLadder.cs` | DCV003 | changed | yes |
+| a price snapped to its tick with `Math.Round(Math.Floor(price / tick + 1e-9) * tick, 12)`, off the tick on both runtimes | `Pricing/TickSnap.cs` | DCV006 | changed | yes |
 | fee rate written as a constant cast | `Fees/FeeSchedule.cs` | DCV002 | changed | yes |
 | hourly interest at a constant fraction of a year, `1.0 / 8760` | `Funding/BorrowInterest.cs` | DCV002 | changed | yes |
 | cents rounded through a double | `Fees/FeeSchedule.cs` | DCV005 | changed | yes |
@@ -49,12 +55,12 @@ The call sites fall into two groups, with the warning the analyzer reports for e
 | whole minutes from `Math.Floor` | `Time/Buckets.cs` | DCV001 | kept | no |
 | size-weighted mid price and spread in basis points, with nearest rounding | `Pricing/MidPrice.cs` | DCV004 | kept | no |
 
-With the analyzer installed the build reports 19 warnings; before any fix, 2 of the 31 tests fail on net10.0 (the two constant casts, which the SDK 11 compiler folds the new way), and 17 fail on net11.0, among them 655.925 and 2.675 rounded to cents.
+With the analyzer installed the build reports 22 warnings; before any fix, 4 of the 36 tests fail on net10.0 (the two constant casts, which the SDK 11 compiler folds the new way, and the two tick snaps), and 22 fail on net11.0, among them 655.925 and 2.675 rounded to cents.
 The hourly fraction has 17 significant digits, and .NET 10 gave `0.000114155251141552` where `ToString("G15")` gives `…553`, so its test passes only with the literal .NET 10 folded.
-`fixture-patches/golden.patch` is the reference fix, which `tools/make-patches.sh` writes by following the skill's path with the real `dotnet format`: the package's helper copied into `Desk.Common`, the six kept files turned off in `.editorconfig`, `dotnet format analyzers --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005` over the solution, and the copied build files put back.
-It changes the ten sites in nine files and adds `src/Desk.Common/FloatingPoint.cs`, and nothing else.
-`fixture-patches/blanket.patch` is the same path with no site kept, so the fix converts all sixteen.
-Both pass all 31 tests on both frameworks, so only the graders on the sites themselves tell them apart: the blanket patch fails exactly the six keep graders.
+`fixture-patches/golden.patch` is the reference fix, which `tools/make-patches.sh` writes by following the skill's path with the real `dotnet format`: the package's helper copied into `Desk.Common`, the six kept files turned off in `.editorconfig`, the generic `Down<T>` made to take a double so that the fix can rewrite it, `dotnet format analyzers --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 DCV006` over the solution, and the copied build files put back.
+It changes the thirteen sites in twelve files and adds `src/Desk.Common/FloatingPoint.cs`, and nothing else.
+`fixture-patches/blanket.patch` is the same path with no site kept, so the fix converts all nineteen.
+Both pass all 36 tests on both frameworks, so only the graders on the sites themselves tell them apart: the blanket patch fails exactly the six keep graders.
 
 ## Cases
 
@@ -85,10 +91,11 @@ It holds the TRX counters of both frameworks, and then:
 | `tests-unchanged` | whether the test files are the ones shipped |
 
 Every case requires the build files back as shipped, the source text unchanged, and no suppression, since the analyzer is gone at the end.
-Every case that changes code requires exactly one new file, in `src/Desk.Common`, and a Bash call of `dotnet format analyzers` with `--diagnostics DCV`.
+Every case that changes code requires exactly one new file, in `src/Desk.Common`.
+The skill arm is also checked for a Bash call of `dotnet format analyzers` with `--diagnostics DCV`, which is reported and not scored.
 `migrate-full` also requires `dcv-sites=0`.
 Regex graders check each site in the other cases: the two untested sites must no longer hold the raw cast, and each site to keep must still hold its original expression.
-Trace graders check that the agent ran `./test.sh`, never called the Grep tool, and never ran a grep that searches the sources or tests, recursive or given a source folder or a `.cs` file.
+Trace graders, which check the skill arm only and are not scored, check that the agent ran `./test.sh`, never called the Grep tool, and never ran a grep that searches the sources or tests, recursive or given a source folder or a `.cs` file.
 A grep that filters the build output is allowed, and so is a grep of a project file, or the skill's one search for the conversions the analyzer cannot see, which names `ToDecimal`, `IConvertible` or `Value<decimal>`.
 Two more fail a run that prints a whole C# file, with `cat` in Bash or with the Read tool and no line limit; the skill prints the lines around each warning instead.
 Another fails any run that reads the suite's own files.

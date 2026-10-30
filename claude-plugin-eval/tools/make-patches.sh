@@ -36,7 +36,10 @@ make() {
     for site in "$@"; do
         printf '\n[src/Desk.Core/%s]\ndotnet_diagnostic.%s.severity = none\n' "${site%%:*}" "${site##*:}" >> .editorconfig
     done
-    dotnet format analyzers Desk.slnx --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 --severity warn --no-restore --report .dcv
+    # The generic T.Round gets no fix, since T could be a float or a decimal.
+    # Its only caller passes a double, so the skill has it take a double, which the DCV003 fix then rewrites.
+    sed -i 's/public static T Down<T>(T price, int decimals) where T : System\.Numerics\.IFloatingPoint<T> => T\.Round(/public static double Down(double price, int decimals) => double.Round(/' src/Desk.Core/Pricing/GridRounding.cs
+    dotnet format analyzers Desk.slnx --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 DCV006 --severity warn --no-restore --report .dcv
     cp -r .dcv/backup/. .
     rm -r .dcv
 

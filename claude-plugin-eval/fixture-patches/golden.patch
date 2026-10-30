@@ -119,6 +119,36 @@ index 910f6a8..9418593 100644
 -        FormattableString.Invariant($"{(buy ? "BUY" : "SELL")} {symbol} qty={(decimal)qty} px={(decimal)price}");
 +        FormattableString.Invariant($"{(buy ? "BUY" : "SELL")} {symbol} qty={FloatingPoint.ToDecimal(qty)} px={FloatingPoint.ToDecimal(price)}");
  }
+diff --git a/src/Desk.Core/Pricing/BidLadder.cs b/src/Desk.Core/Pricing/BidLadder.cs
+index 0cfbabc..4088f79 100644
+--- a/src/Desk.Core/Pricing/BidLadder.cs
++++ b/src/Desk.Core/Pricing/BidLadder.cs
+@@ -1,8 +1,10 @@
++using DecimalConversion;
++
+ namespace Desk.Pricing;
+ 
+ public static class BidLadder
+ {
+-    public static double[] Levels(double[] prices, int decimals) => Round(prices, decimals, Math.Round);
++    public static double[] Levels(double[] prices, int decimals) => Round(prices, decimals, (double value, int digits, MidpointRounding mode) => (double)decimal.Round(FloatingPoint.ToDecimal(value), digits, mode));
+ 
+     private static double[] Round(double[] prices, int decimals, Func<double, int, MidpointRounding, double> round) =>
+         Array.ConvertAll(prices, price => round(price, decimals, MidpointRounding.ToNegativeInfinity));
+diff --git a/src/Desk.Core/Pricing/GridRounding.cs b/src/Desk.Core/Pricing/GridRounding.cs
+index a506eeb..9206743 100644
+--- a/src/Desk.Core/Pricing/GridRounding.cs
++++ b/src/Desk.Core/Pricing/GridRounding.cs
+@@ -1,6 +1,8 @@
++using DecimalConversion;
++
+ namespace Desk.Pricing;
+ 
+ public static class GridRounding
+ {
+-    public static T Down<T>(T price, int decimals) where T : System.Numerics.IFloatingPoint<T> => T.Round(price, decimals, MidpointRounding.ToNegativeInfinity);
++    public static double Down(double price, int decimals) => (double)decimal.Round(FloatingPoint.ToDecimal(price), decimals, MidpointRounding.ToNegativeInfinity);
+ }
 diff --git a/src/Desk.Core/Pricing/PriceRounding.cs b/src/Desk.Core/Pricing/PriceRounding.cs
 index 43aad91..6d2804a 100644
 --- a/src/Desk.Core/Pricing/PriceRounding.cs
@@ -149,6 +179,20 @@ index 7eb8086..f941329 100644
  {
 -    public static int Decimals(double tickSize) => ((decimal)tickSize).Scale;
 +    public static int Decimals(double tickSize) => FloatingPoint.ToDecimal(tickSize).Scale;
+ }
+diff --git a/src/Desk.Core/Pricing/TickSnap.cs b/src/Desk.Core/Pricing/TickSnap.cs
+index 02c7b71..e887f12 100644
+--- a/src/Desk.Core/Pricing/TickSnap.cs
++++ b/src/Desk.Core/Pricing/TickSnap.cs
+@@ -1,6 +1,8 @@
++using DecimalConversion;
++
+ namespace Desk.Pricing;
+ 
+ public static class TickSnap
+ {
+-    public static double Down(double price, double tickSize) => Math.Round(Math.Floor(price / tickSize + 1e-9) * tickSize, 12);
++    public static double Down(double price, double tickSize) => (double)decimal.Round(FloatingPoint.ToDecimal(Math.Floor(price / tickSize + 1e-9)) * FloatingPoint.ToDecimal(tickSize), 12);
  }
 diff --git a/src/Desk.Core/Reports/PnlReport.cs b/src/Desk.Core/Reports/PnlReport.cs
 index 61fca05..fca0d51 100644

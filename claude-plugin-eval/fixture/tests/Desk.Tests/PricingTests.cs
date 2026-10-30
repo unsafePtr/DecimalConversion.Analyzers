@@ -26,4 +26,20 @@ public class PricingTests
     [InlineData(0.25, 2)]
     public void Decimals_CountsTheTicksDecimalPlaces(double tickSize, int expected) =>
         Assert.Equal(expected, TickInfo.Decimals(tickSize));
+
+    [Theory]
+    [InlineData(24409.10, 2)]
+    [InlineData(435.5089, 4)]
+    public void GridDown_KeepsAPriceOnTheGrid(double price, int decimals) =>
+        Assert.Equal(price, GridRounding.Down(price, decimals));
+
+    [Fact]
+    public void BidLadder_KeepsLevelsOnTheGrid() =>
+        Assert.Equal([24409.10, 88571.41, 24409.05], BidLadder.Levels([24409.10, 88571.41, 24409.05], 2));
+
+    [Theory]
+    [InlineData(77131.9, 0.1)]
+    [InlineData(10123.4, 0.1)]
+    public void TickSnap_KeepsAPriceOnItsTick(double price, double tickSize) =>
+        Assert.Equal(price, TickSnap.Down(price, tickSize));
 }
