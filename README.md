@@ -7,7 +7,8 @@
 
 The .NET 11 SDK's compiler also folds constant casts the new way, whatever the target framework.
 Rounding down to cents moves about half of the prices already on the grid, and about half of three-decimal midpoints round the other way ([measurements](claude-plugin/skills/dotnet11-floating-point/references/measurements.md)).
-This repository has a Roslyn analyzer that reports both, code fixes that keep .NET 10's results, and a Claude Code plugin that migrates a solution with them.
+This repository has a Roslyn analyzer that reports both, code fixes, and a Claude Code plugin that migrates a solution with them.
+The fixes convert as .NET 10 did and round as decimals do, which moves no price already on the grid, while .NET 10 moved up to 16 percent of them in some ranges.
 
 ## Migrate with Claude Code
 
@@ -33,14 +34,14 @@ Copy `.editorconfig` and `Directory.Build.props` aside, then add the package to 
   <RestoreAdditionalProjectSources>path/to/DecimalConversion.Analyzers/claude-plugin/skills/dotnet11-floating-point/packages</RestoreAdditionalProjectSources>
 </PropertyGroup>
 <ItemGroup>
-  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.2" PrivateAssets="all" />
+  <PackageReference Include="DecimalConversion.Analyzer" Version="1.4.0" PrivateAssets="all" />
 </ItemGroup>
 ```
 
 1. `dotnet build --no-incremental` lists every site as a DCV warning.
 2. Copy [FloatingPoint.cs](src/DecimalConversion.CodeFixes/Helper/FloatingPoint.cs) into a project that every caller references, so the fix calls it instead of adding a file.
 3. For each file whose sites need no change, add a section for it to `.editorconfig` with `dotnet_diagnostic.DCV001.severity = none`.
-4. `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 --severity warn` applies these fixes only, with no whitespace or style changes.
+4. `dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 DCV006 --severity warn` applies these fixes only, with no whitespace or style changes.
 5. Test on net10.0 and net11.0, then put the two files back.
 
 Under central package management, write `VersionOverride` instead of `Version`.
@@ -52,15 +53,19 @@ To keep the analyzer in the build instead, suppress each kept site with `#pragma
 |---|---|---|
 | DCV001 | A cast, `Convert.ToDecimal`, `new decimal(...)` or `decimal.CreateChecked` from a double or float | `FloatingPoint.ToDecimal(x)` |
 | DCV002 | A double or float constant cast to decimal | The decimal literal .NET 10 gave |
-| DCV003 | `Math.Round`, `MathF.Round`, `double.Round` or `float.Round` to digits with a directed mode | `(double)decimal.Round(FloatingPoint.ToDecimal(x), digits, mode)` |
+| DCV003 | `Math.Round`, `MathF.Round`, `double.Round` or `float.Round` to digits with a directed mode, also as a generic `T.Round`, as `NFloat.Round` or as a method group | `(double)decimal.Round(FloatingPoint.ToDecimal(x), digits, mode)` |
 | DCV004 | The same with a nearest mode, `ToEven`, `AwayFromZero` or none | The same |
 | DCV005 | A decimal sent through a double and back, such as `(decimal)Math.Round((double)amount, 2)` | `FloatingPoint.Normalize(Math.Round(amount, 2))`, which keeps 1.20 printing as 1.2, or `Math.Round(amount, 2)` |
+| DCV006 | A whole number of steps times a step size, rounded to digits, such as `Math.Round(Math.Floor(price / tick) * tick, 12)` | `(double)decimal.Round(FloatingPoint.ToDecimal(Math.Floor(price / tick)) * FloatingPoint.ToDecimal(tick), 12)` |
 
 - DCV002's literal is the value .NET 10 folded, from a port of its conversion: `(decimal)Math.E` becomes `2.71828182845904m`.
 - `decimal.CreateSaturating` and `CreateTruncating` are reported without a fix, since they clamp where the helper throws.
 - `IConvertible.ToDecimal` and `Convert.ToDecimal(object)` on a boxed double or float are not reported.
 - The decimal route throws on NaN, infinity and values beyond decimal's range, where `Math.Round` returns them, so keep `Math.Round` for a computed value.
 - Rounding to zero digits is not reported, since it did not change.
+- A generic `T.Round` and `NFloat.Round` are reported without a fix, since T can be a float or a decimal, and an NFloat is a float in a 32-bit process; a method group gets a lambda that rounds the helper's decimal.
+- `Half.Round` is not reported, since it gives the same results on both runtimes.
+- DCV006 takes the place of DCV004 or DCV003: the product of a tick count and a tick can be one unit in the last place off the tick, as 771319 * 0.1 is 77131.90000000001, and `Math.Round(x, 12)` leaves it there above about 10,000 on both runtimes.
 
 ## The helper
 
@@ -69,6 +74,7 @@ That matches .NET 10 for a double written with up to 15 significant digits, and 
 A computed double with 16 or 17 significant digits can end one unit away in the 15th digit.
 For such a value .NET 10 rounded twice, once when it scaled the value in double arithmetic and once to 15 digits.
 When no caller can see it, the fix adds it to the closest project they all reference, or to the one `.editorconfig` names.
+`dotnet format` then also writes a `<Compile>` item for the new file, which an SDK-style project already compiles by default, so the build fails with NETSDK1022 until that item is deleted; copying the helper first, as step 2 does, avoids it.
 To call a method of your own instead, name it too:
 
 ```ini

@@ -33,11 +33,11 @@ Add the package to `Directory.Build.props`, restored from the copy this skill ca
   <RestoreAdditionalProjectSources>${CLAUDE_SKILL_DIR}/packages</RestoreAdditionalProjectSources>
 </PropertyGroup>
 <ItemGroup>
-  <PackageReference Include="DecimalConversion.Analyzer" Version="1.3.2" PrivateAssets="all" />
+  <PackageReference Include="DecimalConversion.Analyzer" Version="1.4.0" PrivateAssets="all" />
 </ItemGroup>
 ```
 
-Under central package management, where `Directory.Packages.props` sets `ManagePackageVersionsCentrally`, write `VersionOverride="1.3.2"` instead of `Version`.
+Under central package management, where `Directory.Packages.props` sets `ManagePackageVersionsCentrally`, write `VersionOverride="1.4.0"` instead of `Version`.
 
 ## 2. List the sites
 
@@ -60,9 +60,10 @@ That is the whole inventory and all the code the decision in step 4 needs: do no
 |---|---|
 | DCV001 | a cast, `Convert.ToDecimal`, `new decimal(...)` or `decimal.Create*` from a double or float |
 | DCV002 | a constant cast, such as `(decimal)0.0002` |
-| DCV003 | `Math.Round` or `double.Round` to digits with a directed mode, or a mode chosen at run time |
+| DCV003 | `Math.Round` or `double.Round` to digits with a directed mode, or a mode chosen at run time, also as a generic `T.Round`, as `NFloat.Round` or as a method group such as `Func<double, int, MidpointRounding, double> round = Math.Round` |
 | DCV004 | the same with a nearest mode, `ToEven`, `AwayFromZero` or none |
 | DCV005 | a decimal sent through a double and back, such as `(decimal)Math.Round((double)amount, 2)` |
+| DCV006 | a whole number of steps times a step size, rounded to digits, such as `Math.Round(Math.Floor(price / tick) * tick, 12)` |
 
 Only what the analyzer cannot see needs a search, and this one is enough: it lists `Convert.ToDecimal(object)` on a boxed double, `IConvertible.ToDecimal`, and JSON readers that turn a double token into a decimal, such as Newtonsoft's `JToken.Value<decimal>()`.
 Look only at the hits whose value can hold a double.
@@ -80,11 +81,11 @@ Copy the helper into that project before `dotnet format` runs:
 
 ```bash
 packages="$(dotnet nuget locals global-packages --list)"
-cp "${packages#global-packages: }/decimalconversion.analyzer/1.3.2/helper/FloatingPoint.cs" src/Shared/
+cp "${packages#global-packages: }/decimalconversion.analyzer/1.4.0/helper/FloatingPoint.cs" src/Shared/
 ```
 
 With the helper in place, the fix only calls it and no project file changes.
-Without one, the fix writes it itself, and `dotnet format` then re-saves that project's file with a `<Compile>` item and line endings of its own.
+Without one, the fix writes it itself, and `dotnet format` also writes a `<Compile>` item for it into that project's file, which an SDK-style project already compiles by default, so the build fails with NETSDK1022 until that item is deleted.
 The shipped file has LF line endings and no byte order mark.
 To call a helper the code already has instead, name it in `.editorconfig` with `decimal_conversion_helper = MyCompany.Numerics.FloatingPoint.ToDecimal`; it needs a `float` overload as well as the `double` one, and a `Normalize(decimal)` for DCV005.
 
@@ -110,6 +111,7 @@ Sink:
 | decimal intent | a sensitive sink | fix |
 | decimal intent | a nearest round (DCV004) | fix, which rounds 655.925 to 655.93 as .NET 10 did |
 | any | a directed round (DCV003) | fix |
+| any | a whole number of steps times a step size (DCV006) | fix, since the product is computed but meant to land on the grid, and rounding it to digits does not put it back above about 10,000 on either runtime |
 
 Keep the `Math.Round` of a computed value: the decimal route throws on NaN, infinity and values beyond decimal's range, where `Math.Round` returns them.
 For a computed value it is also not exact, since the helper first cuts the value to 15 significant digits.
@@ -129,20 +131,24 @@ Where one file holds a site to keep and a site to fix of the same rule, suppress
 
 ## 5. Apply the fixes
 
+A generic `T.Round` and `NFloat.Round` get no fix, since T can be a float or a decimal, and an NFloat is a float in a 32-bit process.
+Where every caller of a generic one passes a double, make the method take a double instead, `T` to `double` and `T.Round` to `double.Round`, before running the command, so the fix rewrites it; a caller that passes another type then fails to build and shows itself.
+Otherwise round each type as it needs, by hand.
+
 ```bash
-dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 --severity warn --no-restore --report .dcv
+dotnet format analyzers <solution> --diagnostics DCV001 DCV002 DCV003 DCV004 DCV005 DCV006 --severity warn --no-restore --report .dcv
 ```
 
 `analyzers` runs analyzer fixes only, not the whitespace or style formatters, and `--diagnostics` limits them to this package's rules, so nothing else in the code changes.
 Run it once over the whole solution, so it sees every caller of the helper.
 `--report .dcv` writes `.dcv/format-report.json`, with the file, line, rule and expression of each site it fixed: that is the list of changes for the report, so read it rather than search the code for them.
-It writes the helper call for DCV001, the decimal literal for DCV002, `(double)decimal.Round(FloatingPoint.ToDecimal(x), digits, mode)` for DCV003 and DCV004, and `FloatingPoint.Normalize(Math.Round(amount, n))` for DCV005, which keeps the text form without trailing zeros that the trip through double gave.
+It writes the helper call for DCV001, the decimal literal for DCV002, `(double)decimal.Round(FloatingPoint.ToDecimal(x), digits, mode)` for DCV003 and DCV004, with a lambda of the same in place of a method group, `FloatingPoint.Normalize(Math.Round(amount, n))` for DCV005, which keeps the text form without trailing zeros that the trip through double gave, and `(double)decimal.Round(FloatingPoint.ToDecimal(count) * FloatingPoint.ToDecimal(step), digits)` for DCV006.
 `decimal.CreateSaturating` and `CreateTruncating` get no fix, since they clamp a value the helper would throw on: clamp or check it as the site needs, then call the helper.
 If `dotnet format` cannot load the solution, report the error and stop rather than rewriting the sites by hand.
 
 ## 6. Check, then remove the analyzer
 
-1. Build again with `--no-incremental`: no DCV warning may be left, since the kept sites are silenced by their entries; a warning left is a site the fix cannot rewrite, such as `CreateSaturating`, or one not yet decided. Check the result with this build, the report and the tests, not by reading or searching the changed files, since `dotnet format` writes only the fixes.
+1. Build again with `--no-incremental`: no DCV warning may be left, since the kept sites are silenced by their entries; a warning left is a site the fix cannot rewrite, such as `CreateSaturating`, a generic `T.Round` or `NFloat.Round`, or one not yet decided. Check the result with this build, the report and the tests, not by reading or searching the changed files, since `dotnet format` writes only the fixes.
 2. Run the tests on both runtimes while the migration block is still in place, for example with `<TargetFrameworks>net10.0;net11.0</TargetFrameworks>` in the test project. A test run on .NET 10 alone proves nothing here, and once the SDK is 11, constant casts fail on net10.0 as well. Do not change a test's expected value to match the new output unless the old value was wrong for a reason you can state.
 3. If a test shows that a kept site needs the fix after all, delete that file's entry from the block and run step 5 again: the other entries still hold the kept sites back. Never run `dotnet format` once the block is gone, since it would then rewrite every kept site.
 4. Put the copies back and delete the folder, report included: `cp -r .dcv/backup/. . && rm -r .dcv`. That removes the package reference and the migration block, while the helper file stays. If a project file had changed too, a caller could not see the copied helper and got one of its own: choose a project every caller references. Delete a file step 1 created and any pragma lines step 4 added.
