@@ -35,7 +35,7 @@ internal static class Descriptors
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Since .NET 11, Math.Round with digits rounds the exact binary value of a double. 24409.10 is stored as 24409.0999999999985448..., so rounding it down to 2 digits gives 24409.09. With ToNegativeInfinity, ToPositiveInfinity or ToZero 40 to 50 percent of the prices already on a grid move by one tick, against up to 7 percent on .NET 10. Rounding the helper's decimal moves none on either runtime. ToEven and AwayFromZero leave a value on the grid where it is, and zero digits is Floor, Ceiling or Truncate, so neither is reported.",
+        description: "Since .NET 11, Math.Round with digits rounds the exact binary value of a double. 24409.10 is stored as 24409.0999999999985448..., so rounding it down to 2 digits gives 24409.09. Each of ToNegativeInfinity, ToPositiveInfinity and ToZero moves 40 to 50 percent of the prices already on a grid by one step, where .NET 10 moved none to 16 percent, depending on the price range. Rounding the helper's decimal moves none on either runtime. ToEven and AwayFromZero leave a value on the grid where it is and are reported as DCV004, and zero digits is Floor, Ceiling or Truncate, which did not change and is not reported.",
         helpLinkUri: RoundingHelpLink);
 
     public static readonly DiagnosticDescriptor NearestRounding = new(
@@ -45,7 +45,7 @@ internal static class Descriptors
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Since .NET 11, Math.Round with digits rounds the exact binary value of a double even with ToEven or AwayFromZero. 655.925 is stored as 655.924999999999954..., so Math.Round(655.925, 2, MidpointRounding.AwayFromZero) gives 655.92, where .NET 10 gave 655.93. About half of the values written one digit past the rounding position and ending in 5 round the other way, against 6 percent on .NET 10, and rounding the helper's decimal gets every one of them right. A computed value is better left as it is: the decimal route throws on NaN, infinity and values beyond decimal's range, where Math.Round returns them.",
+        description: "Since .NET 11, Math.Round with digits rounds the exact binary value of a double even with ToEven or AwayFromZero. 655.925 is stored as 655.924999999999954..., so Math.Round(655.925, 2, MidpointRounding.AwayFromZero) gives 655.92, where .NET 10 gave 655.93. About half of the values written one digit past the rounding position and ending in 5 round the other way, against 6 to 9 percent on .NET 10, and rounding the helper's decimal gets every one of them right. A computed value is better left as it is: the decimal route throws on NaN, infinity and values beyond decimal's range, where Math.Round returns them.",
         helpLinkUri: RoundingHelpLink);
 
     public static readonly DiagnosticDescriptor DecimalRoundTrip = new(
@@ -57,4 +57,14 @@ internal static class Descriptors
         isEnabledByDefault: true,
         description: "(decimal)Math.Round((double)amount, 2) rounds a double: 1.015 becomes 1.01 on .NET 10 and 1.23 becomes 1.2299999999999999822364316060 on .NET 11, where Math.Round(amount, 2) on the decimal gives 1.02 and 1.23. The trip through double also dropped trailing zeros, so 1.20 printed as 1.2. Normalize keeps that text form by formatting with G29, which omits trailing zeros, and parsing the text back. Where the value never becomes text, the decimal overload alone is enough.",
         helpLinkUri: HelpLink);
+
+    public static readonly DiagnosticDescriptor StepProduct = new(
+        id: "DCV006",
+        title: "Multiply a whole number of steps by the step size as decimals",
+        messageFormat: "'{0}' rounds a whole number of steps times a step size, a product that can sit one unit in the last place off the step, below where rounding to digits reaches; multiply the two as decimals through '{1}'",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Math.Floor(price / tick) * tick can give a double one unit in the last place off the tick: 771319 * 0.1 is 77131.90000000001. Rounding that product to 12 digits leaves it there above about 10,000 on .NET 10 and .NET 11 alike, since its error lies below the twelfth decimal, so 20 percent of the 0.1 ticks from 77,000 to 78,000 stay off the grid. Multiplying the count and the step as decimals gives the step exactly, and the cast back gives the double nearest to it. Such a site is reported as this rule rather than DCV004, since the product is computed but is meant to land on the grid.",
+        helpLinkUri: "https://github.com/unsafePtr/DecimalConversion.Analyzers#rules");
 }

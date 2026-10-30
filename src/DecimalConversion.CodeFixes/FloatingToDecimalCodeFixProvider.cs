@@ -14,7 +14,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace DecimalConversion;
 
 /// <summary>
-/// Rewrites DCV002 to a decimal literal, DCV001 to a call of the configured helper, DCV003 and DCV004 to <c>decimal.Round</c> of the helper's value, and DCV005 to the decimal overload.
+/// Rewrites DCV002 to a decimal literal, DCV001 to a call of the configured helper, DCV003 and DCV004 to <c>decimal.Round</c> of the helper's value, or to a lambda of it in place of a method group, DCV005 to the decimal overload, and DCV006 to <c>decimal.Round</c> of the product of the helper's values.
 /// The helper's source is added to the solution when the callers cannot see one, so the package can be removed once the fixes are in.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(FloatingToDecimalCodeFixProvider))]
@@ -30,7 +30,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
     private static readonly FixAllProvider DocumentFixAll =
         FixAllProvider.Create(static async (context, document, diagnostics) => await FixAsync(document, diagnostics, context.CodeActionEquivalenceKey, context.CancellationToken).ConfigureAwait(false), Scopes);
 
-    public override ImmutableArray<string> FixableDiagnosticIds { get; } = [Descriptors.RuntimeConversion.Id, Descriptors.ConstantConversion.Id, Descriptors.DirectedRounding.Id, Descriptors.NearestRounding.Id, Descriptors.DecimalRoundTrip.Id];
+    public override ImmutableArray<string> FixableDiagnosticIds { get; } = [Descriptors.RuntimeConversion.Id, Descriptors.ConstantConversion.Id, Descriptors.DirectedRounding.Id, Descriptors.NearestRounding.Id, Descriptors.DecimalRoundTrip.Id, Descriptors.StepProduct.Id];
 
     public override FixAllProvider GetFixAllProvider() => HelperFixAll.Instance;
 
@@ -39,7 +39,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
         var document = context.Document;
         foreach (var diagnostic in context.Diagnostics)
         {
-            if (diagnostic.Properties.ContainsKey(FloatingToDecimalAnalyzer.ClampsProperty))
+            if (HasNoFix(diagnostic))
             {
                 continue;
             }
@@ -51,7 +51,10 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            var title = diagnostic.Id == Descriptors.DecimalRoundTrip.Id ? "Keep it a decimal, without the trailing zeros the double dropped" : IsRounding(diagnostic) ? "Round as a decimal through the helper" : "Convert through the helper";
+            var title = diagnostic.Id == Descriptors.DecimalRoundTrip.Id ? "Keep it a decimal, without the trailing zeros the double dropped"
+                : diagnostic.Id == Descriptors.StepProduct.Id ? "Multiply as decimals through the helper"
+                : IsRounding(diagnostic) ? "Round as a decimal through the helper"
+                : "Convert through the helper";
             context.RegisterCodeFix(
                 CodeAction.Create(title, async ct => await AddMissingHelpersAsync(document.Project.Solution, (await FixAsync(document, diagnostics, diagnostic.Id, ct).ConfigureAwait(false)).Project.Solution, ct).ConfigureAwait(false), diagnostic.Id),
                 diagnostic);
@@ -78,7 +81,7 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
         var usesHelper = false;
         foreach (var diagnostic in diagnostics)
         {
-            if (diagnostic.Properties.ContainsKey(FloatingToDecimalAnalyzer.ClampsProperty))
+            if (HasNoFix(diagnostic))
             {
                 continue;
             }
@@ -109,7 +112,14 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
 
             if (IsRounding(diagnostic))
             {
-                if (model.GetOperation(node, cancellationToken) is IInvocationOperation invocation && RoundThroughDecimal(invocation, helper) is { } rounded)
+                var rounded = model.GetOperation(node, cancellationToken) switch
+                {
+                    IInvocationOperation invocation => RoundThroughDecimal(invocation, helper, stepProduct: diagnostic.Id == Descriptors.StepProduct.Id),
+                    IMethodReferenceOperation reference => LambdaThroughDecimal(reference.Method, helper, editor.Generator),
+                    IDelegateCreationOperation { Target: IMethodReferenceOperation reference } => LambdaThroughDecimal(reference.Method, helper, editor.Generator),
+                    _ => null,
+                };
+                if (rounded is not null)
                 {
                     Replace(editor, node, rounded);
                     usesHelper |= !IsInsideNamespace(node, helper.Namespace);
@@ -355,19 +365,24 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
             SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.IdentifierName(helper.Type), SyntaxFactory.IdentifierName(HelperOption.NormalizeMethod)),
             SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(value))));
 
-    private static bool IsRounding(Diagnostic diagnostic) => diagnostic.Id == Descriptors.DirectedRounding.Id || diagnostic.Id == Descriptors.NearestRounding.Id;
+    private static bool IsRounding(Diagnostic diagnostic) => diagnostic.Id == Descriptors.DirectedRounding.Id || diagnostic.Id == Descriptors.NearestRounding.Id || diagnostic.Id == Descriptors.StepProduct.Id;
+
+    private static bool HasNoFix(Diagnostic diagnostic) => diagnostic.Properties.ContainsKey(FloatingToDecimalAnalyzer.ClampsProperty) || diagnostic.Properties.ContainsKey(RoundingAnalyzer.NoFixProperty);
 
     /// <summary>
     /// <c>(double)decimal.Round(Helper(value), digits[, mode])</c> for a Round call DCV003 or DCV004 reported, with <c>float</c> for a float, or null when an argument is not written out.
+    /// For DCV006 the rounded decimal is the product of the two factors as decimals: <c>Helper(count) * Helper(step)</c>, with an integer count left as it is.
     /// </summary>
     /// <remarks>
     /// A value widened to the double overload is cast to double first, so the helper rounds the double that Round saw.
     /// A call without a mode keeps none, since <c>decimal.Round</c> also defaults to ToEven.
     /// The rounded decimal keeps at most 15 significant digits, so for up to 22 digits the cast back gives the same double on .NET 10 and .NET 11.
     /// </remarks>
-    private static ExpressionSyntax? RoundThroughDecimal(IInvocationOperation invocation, HelperOption helper)
+    private static ExpressionSyntax? RoundThroughDecimal(IInvocationOperation invocation, HelperOption helper, bool stepProduct)
     {
         if (!RoundingAnalyzer.TryMatch(invocation, out var value, out var digits, out var mode)
+            || !RoundingAnalyzer.IsRoundToDigits(invocation.TargetMethod, out var fixable)
+            || !fixable
             || value.Syntax is not ArgumentSyntax valueArgument
             || digits.Syntax is not ArgumentSyntax digitsArgument
             || mode is { Syntax: not ArgumentSyntax })
@@ -375,26 +390,76 @@ public sealed class FloatingToDecimalCodeFixProvider : CodeFixProvider
             return null;
         }
 
-        var type = SyntaxFactory.PredefinedType(SyntaxFactory.Token(invocation.TargetMethod.Parameters[0].Type.SpecialType == SpecialType.System_Single ? SyntaxKind.FloatKeyword : SyntaxKind.DoubleKeyword));
-        var operand = valueArgument.Expression.WithoutTrivia();
-        if (value.Value is IConversionOperation { IsImplicit: true } widening && !SymbolEqualityComparer.Default.Equals(widening.Operand.Type, widening.Type))
+        var type = FloatingKeyword(invocation.TargetMethod.Parameters[0].Type);
+        ExpressionSyntax rounded;
+        if (stepProduct)
         {
-            operand = SyntaxFactory.CastExpression(type, AsCastOperand(operand));
+            if (value.Value is not IBinaryOperation product)
+            {
+                return null;
+            }
+
+            var times = SyntaxFactory.Token(SyntaxKind.AsteriskToken).WithLeadingTrivia(SyntaxFactory.Space).WithTrailingTrivia(SyntaxFactory.Space);
+            rounded = SyntaxFactory.BinaryExpression(SyntaxKind.MultiplyExpression, AsDecimalFactor(product.LeftOperand, helper), times, AsDecimalFactor(product.RightOperand, helper));
+        }
+        else
+        {
+            var operand = valueArgument.Expression.WithoutTrivia();
+            if (value.Value is IConversionOperation { IsImplicit: true } widening && !SymbolEqualityComparer.Default.Equals(widening.Operand.Type, widening.Type))
+            {
+                operand = SyntaxFactory.CastExpression(type, AsCastOperand(operand));
+            }
+
+            rounded = HelperCall(helper, operand);
         }
 
-        var comma = SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space);
-        List<ArgumentSyntax> arguments = [SyntaxFactory.Argument(HelperCall(helper, operand)), SyntaxFactory.Argument(digitsArgument.Expression.WithoutTrivia())];
-        if (mode?.Syntax is ArgumentSyntax modeArgument)
-        {
-            arguments.Add(SyntaxFactory.Argument(modeArgument.Expression.WithoutTrivia()));
-        }
-
-        var round = SyntaxFactory.InvocationExpression(
-            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.DecimalKeyword)), SyntaxFactory.IdentifierName("Round")),
-            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments, Enumerable.Repeat(comma, arguments.Count - 1))));
-        ExpressionSyntax cast = SyntaxFactory.CastExpression(type, round);
+        ExpressionSyntax cast = SyntaxFactory.CastExpression(type, DecimalRound(rounded, digitsArgument.Expression.WithoutTrivia(), (mode?.Syntax as ArgumentSyntax)?.Expression.WithoutTrivia()));
         return NeedsParentheses(invocation.Syntax) ? SyntaxFactory.ParenthesizedExpression(cast) : cast;
     }
+
+    /// <summary>
+    /// A lambda that rounds the helper's decimal, in place of a Round method group: <c>(double value, int digits, MidpointRounding mode) => (double)decimal.Round(Helper(value), digits, mode)</c>.
+    /// </summary>
+    /// <remarks>
+    /// The parameters are typed, so the lambda converts to the same delegate type and takes part in type inference as the method group did.
+    /// They carry the method's own parameter names, which may shadow a local of the same name since C# 8.
+    /// </remarks>
+    private static ExpressionSyntax? LambdaThroughDecimal(IMethodSymbol method, HelperOption helper, SyntaxGenerator generator)
+    {
+        if (!RoundingAnalyzer.IsRoundToDigits(method, out var fixable) || !fixable)
+        {
+            return null;
+        }
+
+        var parameters = method.Parameters.Select(p => SyntaxFactory.Parameter(SyntaxFactory.Identifier(p.Name)).WithType((TypeSyntax)generator.TypeExpression(p.Type)));
+        var names = method.Parameters.Select(p => (ExpressionSyntax)SyntaxFactory.IdentifierName(p.Name)).ToList();
+        var type = FloatingKeyword(method.Parameters[0].Type);
+        var body = SyntaxFactory.CastExpression(type, DecimalRound(HelperCall(helper, names[0]), names[1], names.Count == 3 ? names[2] : null));
+        return SyntaxFactory.ParenthesizedLambdaExpression(SyntaxFactory.ParameterList(SyntaxFactory.SeparatedList(parameters)), body).NormalizeWhitespace();
+    }
+
+    private static PredefinedTypeSyntax FloatingKeyword(ITypeSymbol type) =>
+        SyntaxFactory.PredefinedType(SyntaxFactory.Token(type.SpecialType == SpecialType.System_Single ? SyntaxKind.FloatKeyword : SyntaxKind.DoubleKeyword));
+
+    private static InvocationExpressionSyntax DecimalRound(ExpressionSyntax value, ExpressionSyntax digits, ExpressionSyntax? mode)
+    {
+        var comma = SyntaxFactory.Token(SyntaxKind.CommaToken).WithTrailingTrivia(SyntaxFactory.Space);
+        List<ArgumentSyntax> arguments = [SyntaxFactory.Argument(value), SyntaxFactory.Argument(digits)];
+        if (mode is not null)
+        {
+            arguments.Add(SyntaxFactory.Argument(mode));
+        }
+
+        return SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(SyntaxKind.SimpleMemberAccessExpression, SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.DecimalKeyword)), SyntaxFactory.IdentifierName("Round")),
+            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments, Enumerable.Repeat(comma, arguments.Count - 1))));
+    }
+
+    // An integer converts to decimal exactly, so a count of that type is multiplied as it is, without the double it was converted to.
+    private static ExpressionSyntax AsDecimalFactor(IOperation factor, HelperOption helper) =>
+        RoundingAnalyzer.IntegerSource(factor) is { Syntax: ExpressionSyntax integer }
+            ? AsCastOperand(integer.WithoutTrivia())
+            : HelperCall(helper, ((ExpressionSyntax)factor.Syntax).WithoutTrivia());
 
     // A cast binds looser than member access, element access, invocation and postfix operators, so as their operand it needs parentheses.
     private static bool NeedsParentheses(SyntaxNode node) => node.Parent switch

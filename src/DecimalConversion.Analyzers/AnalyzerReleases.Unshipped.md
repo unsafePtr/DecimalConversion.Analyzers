@@ -10,3 +10,4 @@ DCV002 | Reliability | Warning | FloatingToDecimalAnalyzer
 DCV003 | Reliability | Warning | RoundingAnalyzer
 DCV004 | Reliability | Warning | RoundingAnalyzer
 DCV005 | Reliability | Warning | FloatingToDecimalAnalyzer
+DCV006 | Reliability | Warning | RoundingAnalyzer

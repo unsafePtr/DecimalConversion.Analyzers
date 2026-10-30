@@ -293,4 +293,182 @@ public class RoundingTests
             decimal F(decimal p) => decimal.Round(p, 2, MidpointRounding.AwayFromZero);
         }
         """);
+
+    [Fact]
+    public Task GenericRound_OnIFloatingPoint_ReportsDcv003() => Verify.VerifyAsync(
+        """
+        using System;
+        using System.Numerics;
+
+        static class Steps
+        {
+            public static T Down<T>(T price, int decimals) where T : IFloatingPoint<T> => {|DCV003:T.Round(price, decimals, MidpointRounding.ToNegativeInfinity)|};
+            public static T Nearest<T>(T price, int decimals) where T : IBinaryFloatingPointIeee754<T> => {|DCV004:T.Round(price, decimals)|};
+            public static T Whole<T>(T price) where T : IFloatingPoint<T> => T.Round(price, 0, MidpointRounding.ToNegativeInfinity);
+        }
+        """,
+        """
+        using System;
+        using System.Numerics;
+
+        static class Steps
+        {
+            public static T Down<T>(T price, int decimals) where T : IFloatingPoint<T> => {|DCV003:T.Round(price, decimals, MidpointRounding.ToNegativeInfinity)|};
+            public static T Nearest<T>(T price, int decimals) where T : IBinaryFloatingPointIeee754<T> => {|DCV004:T.Round(price, decimals)|};
+            public static T Whole<T>(T price) where T : IFloatingPoint<T> => T.Round(price, 0, MidpointRounding.ToNegativeInfinity);
+        }
+        """);
+
+    [Fact]
+    public Task NFloatRound_ToDigits_ReportsWithoutFix() => Verify.VerifyAsync(
+        """
+        using System;
+        using System.Runtime.InteropServices;
+
+        class C
+        {
+            NFloat Down(NFloat price) => {|DCV003:NFloat.Round(price, 2, MidpointRounding.ToNegativeInfinity)|};
+            NFloat Nearest(NFloat price) => {|DCV004:NFloat.Round(price, 2)|};
+        }
+        """,
+        """
+        using System;
+        using System.Runtime.InteropServices;
+
+        class C
+        {
+            NFloat Down(NFloat price) => {|DCV003:NFloat.Round(price, 2, MidpointRounding.ToNegativeInfinity)|};
+            NFloat Nearest(NFloat price) => {|DCV004:NFloat.Round(price, 2)|};
+        }
+        """);
+
+    [Fact]
+    public Task HalfRound_ToDigits_NotReported() => Verify.VerifyNoDiagnosticAsync(
+        """
+        using System;
+
+        class C
+        {
+            Half Down(Half price) => Half.Round(price, 2, MidpointRounding.ToNegativeInfinity);
+        }
+        """);
+
+    [Fact]
+    public Task RoundMethodGroup_ConvertedToADelegate_BecomesALambdaThroughTheHelper() => Verify.VerifyAsync(
+        """
+        using System;
+
+        class C
+        {
+            static readonly Func<double, int, MidpointRounding, double> Round = {|DCV003:Math.Round|};
+            static readonly Func<double, int, double> Nearest = {|DCV004:double.Round|};
+            static readonly Func<float, int, MidpointRounding, float> RoundFloat = new({|DCV003:MathF.Round|});
+
+            double Apply(Func<double, int, MidpointRounding, double> round, double price) => round(price, 2, MidpointRounding.ToZero);
+            double Down(double value) => Apply({|DCV003:Math.Round|}, value);
+        }
+        """,
+        """
+        using System;
+        using DecimalConversion;
+
+        class C
+        {
+            static readonly Func<double, int, MidpointRounding, double> Round = (double value, int digits, MidpointRounding mode) => (double)decimal.Round(FloatingPoint.ToDecimal(value), digits, mode);
+            static readonly Func<double, int, double> Nearest = (double x, int digits) => (double)decimal.Round(FloatingPoint.ToDecimal(x), digits);
+            static readonly Func<float, int, MidpointRounding, float> RoundFloat = new((float x, int digits, MidpointRounding mode) => (float)decimal.Round(FloatingPoint.ToDecimal(x), digits, mode));
+
+            double Apply(Func<double, int, MidpointRounding, double> round, double price) => round(price, 2, MidpointRounding.ToZero);
+            double Down(double value) => Apply((double value, int digits, MidpointRounding mode) => (double)decimal.Round(FloatingPoint.ToDecimal(value), digits, mode), value);
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task RoundMethodGroup_WithoutDigits_NotReported() => Verify.VerifyNoDiagnosticAsync(
+        """
+        using System;
+
+        class C
+        {
+            static readonly Func<double, double> Whole = Math.Round;
+            static readonly Func<double, MidpointRounding, double> WholeDown = Math.Round;
+            static readonly Func<decimal, int, MidpointRounding, decimal> Exact = Math.Round;
+        }
+        """);
+
+    [Fact]
+    public Task TickSnap_FloorTimesTick_ReportsDcv006AndMultipliesAsDecimals() => Verify.VerifyAsync(
+        """
+        using System;
+
+        class Ticks
+        {
+            double Snap(double price, double tick) => {|DCV006:Math.Round(Math.Floor(price / tick + 1e-9) * tick, 12)|};
+            double Up(double price, double tick) => {|DCV006:double.Round(tick * Math.Ceiling(price / tick), 8, MidpointRounding.ToZero)|};
+        }
+        """,
+        """
+        using System;
+        using DecimalConversion;
+
+        class Ticks
+        {
+            double Snap(double price, double tick) => (double)decimal.Round(FloatingPoint.ToDecimal(Math.Floor(price / tick + 1e-9)) * FloatingPoint.ToDecimal(tick), 12);
+            double Up(double price, double tick) => (double)decimal.Round(FloatingPoint.ToDecimal(tick) * FloatingPoint.ToDecimal(Math.Ceiling(price / tick)), 8, MidpointRounding.ToZero);
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task TickSnap_IntegerCount_MultipliesTheCountUnconverted() => Verify.VerifyAsync(
+        """
+        using System;
+
+        class Ladder
+        {
+            double Level(long steps, double tick) => {|DCV006:Math.Round(steps * tick, 12)|};
+            double Offset(int first, int i, double tick) => {|DCV006:Math.Round((double)(first + i) * tick, 12)|};
+        }
+        """,
+        """
+        using System;
+        using DecimalConversion;
+
+        class Ladder
+        {
+            double Level(long steps, double tick) => (double)decimal.Round(steps * FloatingPoint.ToDecimal(tick), 12);
+            double Offset(int first, int i, double tick) => (double)decimal.Round((first + i) * FloatingPoint.ToDecimal(tick), 12);
+        }
+        """,
+        DefaultHelper);
+
+    [Fact]
+    public Task Multiply_WithoutAWholeNumberOfSteps_StaysDcv004() => Verify.VerifyAsync(
+        """
+        using System;
+
+        class C
+        {
+            double Floored(double price, double tick) => Math.Floor(price / tick) * tick;
+            double Percent(double ratio) => {|DCV004:Math.Round(ratio * 100, 2)|};
+            double Notional(double price, double size) => {|DCV004:Math.Round(price * size, 2)|};
+            double Whole(double a, long b) => {|DCV004:Math.Round(Math.Floor(a) * b, 2)|};
+            double Ticks(double price, double tick) => Math.Round(Math.Floor(price / tick) * tick, 0);
+        }
+        """,
+        """
+        using System;
+        using DecimalConversion;
+
+        class C
+        {
+            double Floored(double price, double tick) => Math.Floor(price / tick) * tick;
+            double Percent(double ratio) => (double)decimal.Round(FloatingPoint.ToDecimal(ratio * 100), 2);
+            double Notional(double price, double size) => (double)decimal.Round(FloatingPoint.ToDecimal(price * size), 2);
+            double Whole(double a, long b) => (double)decimal.Round(FloatingPoint.ToDecimal(Math.Floor(a) * b), 2);
+            double Ticks(double price, double tick) => Math.Round(Math.Floor(price / tick) * tick, 0);
+        }
+        """,
+        DefaultHelper);
 }
